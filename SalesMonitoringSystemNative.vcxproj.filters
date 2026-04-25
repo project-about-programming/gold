@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A4AB46E2-0B0D-4E55-96E1-F9FEF406E340}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{85543236-D78B-415E-8B87-5760943AF1B6}</UniqueIdentifier>
+      <Extensions>h;hpp;inl</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\AccessControl.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\AppMessages.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\DataEntryDialog.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\Theme.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\UiHelpers.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\Localization.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\LoginWindow.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\PageBase.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\MainWindow.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\DashboardPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\SalesPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\OrdersPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\ProductsPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\ClientsPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\EmployeesPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\AnalyticsPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\ReportsPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\SettingsPage.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\DataModels.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\DataRepository.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\SqliteDatabase.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\AccessControl.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\DataEntryDialog.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\main.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\Localization.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\LoginWindow.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\Theme.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\UiHelpers.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\PageBase.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\MainWindow.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\DashboardPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\SalesPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\OrdersPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\ProductsPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\ClientsPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\EmployeesPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\AnalyticsPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\ReportsPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\SettingsPage.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\SqliteDatabase.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\DataRepository.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="third_party\sqlite\sqlite3.c"><Filter>Source Files</Filter></ClCompile>
+  </ItemGroup>
+</Project>
+
+
+
