@@ -3,38 +3,45 @@
 #include "AccessControl.h"
 #include "AnalyticsPage.h"
 #include "AppMessages.h"
+#include "AuditLogPage.h"
 #include "ClientsPage.h"
 #include "DataRepository.h"
 #include "DashboardPage.h"
 #include "EmployeesPage.h"
 #include "Localization.h"
+#include "NotificationsPage.h"
 #include "OrdersPage.h"
 #include "ProductsPage.h"
+#include "ProfilePage.h"
 #include "ReportsPage.h"
 #include "SalesPage.h"
 #include "SettingsPage.h"
 #include "Theme.h"
 #include "UiHelpers.h"
+#include "UsersRolesPage.h"
 
 #include <commctrl.h>
+#include <algorithm>
 #include <array>
 #include <cwchar>
 #include <ctime>
 
 namespace {
 constexpr int kNavBaseId = 1000;
+constexpr int kHeaderRefreshId = 9401;
+constexpr int kHeaderExportId = 9402;
 constexpr UINT_PTR kClockTimerId = 42;
 HBRUSH gHeaderBrush = nullptr;
 
-int SidebarWidth() { return ui::Scale(248); }
-int HeaderHeight() { return ui::Scale(96); }
-int StatusHeight() { return ui::Scale(24); }
+int SidebarWidth() { return ui::Scale(240); }
+int HeaderHeight() { return ui::Scale(112); }
+int StatusHeight() { return 0; }
 int ShellMargin() { return ui::GetMetrics().outerPadding; }
 RECT HeaderRect(const RECT& client) {
     return ui::MakeRect(SidebarWidth() + ShellMargin(), ShellMargin(), client.right - ShellMargin(), HeaderHeight());
 }
 RECT HeaderClockRect(const RECT& client) {
-    return ui::MakeRect(client.right - ui::Scale(252), ui::Scale(38), client.right - ui::Scale(36), ui::Scale(70));
+    return ui::MakeRect(client.right - ui::Scale(232), ui::Scale(44), client.right - ui::Scale(34), ui::Scale(76));
 }
 
 constexpr std::array<const wchar_t*, 9> kNavKeys = {
@@ -44,10 +51,47 @@ constexpr std::array<const wchar_t*, 9> kNavKeys = {
 constexpr std::array<const wchar_t*, 9> kPageTitleKeys = {
     L"page.dashboard.title", L"page.sales.title", L"page.orders.title", L"page.products.title", L"page.clients.title", L"page.employees.title", L"page.analytics.title", L"page.reports.title", L"page.settings.title"
 };
+
+struct MenuSpec {
+    const wchar_t* section;
+    const wchar_t* title;
+    int pageIndex;
+    int iconIndex;
+    access::Permission permission;
+    bool hasPermission;
+    bool isPlaceholder;
+    bool bottomAligned;
+};
+
+const std::array<MenuSpec, 13> kMenuSpecs = {
+    MenuSpec{ L"MAIN", L"Dashboard", access::kPageDashboard, 0, access::Permission::OpenDashboard, true, false, false },
+    MenuSpec{ L"MAIN", L"Analytics", access::kPageAnalytics, 6, access::Permission::OpenAnalytics, true, false, false },
+    MenuSpec{ L"MAIN", L"Notifications", access::kPageNotifications, 7, access::Permission::OpenNotifications, true, false, false },
+    MenuSpec{ L"SALES", L"Sales", access::kPageSales, 1, access::Permission::OpenSales, true, false, false },
+    MenuSpec{ L"SALES", L"Orders", access::kPageOrders, 2, access::Permission::OpenOrders, true, false, false },
+    MenuSpec{ L"SALES", L"Customers", access::kPageClients, 4, access::Permission::OpenClients, true, false, false },
+    MenuSpec{ L"STOCK", L"Inventory", access::kPageProducts, 3, access::Permission::OpenProducts, true, false, false },
+    MenuSpec{ L"MANAGEMENT", L"Employees", access::kPageEmployees, 5, access::Permission::OpenEmployees, true, false, false },
+    MenuSpec{ L"MANAGEMENT", L"Reports", access::kPageReports, 7, access::Permission::OpenReports, true, false, false },
+    MenuSpec{ L"SYSTEM", L"Users & Roles", access::kPageUsersRoles, 5, access::Permission::ManageUsers, true, false, false },
+    MenuSpec{ L"SYSTEM", L"Audit Log", access::kPageAuditLog, 7, access::Permission::OpenAuditLog, true, false, false },
+    MenuSpec{ L"SYSTEM", L"Profile", access::kPageProfile, 5, access::Permission::OpenProfile, true, false, false },
+    MenuSpec{ L"SYSTEM", L"Settings", access::kPageSettings, 8, access::Permission::OpenSettings, true, false, true }
+};
+
+bool CanShowMenuItem(const data::AccountRecord& account, const MenuSpec& spec) {
+    if (spec.isPlaceholder) {
+        return access::HasPermission(account, spec.permission);
+    }
+    if (spec.hasPermission) {
+        return access::HasPermission(account, spec.permission) || access::CanOpenPage(account, spec.pageIndex);
+    }
+    return access::CanOpenPage(account, spec.pageIndex);
+}
 }
 
 MainWindow::MainWindow(HINSTANCE instance)
-    : instance_(instance), hwnd_(nullptr), clockLabel_(nullptr), statusBar_(nullptr), currentPage_(0) {}
+    : instance_(instance), hwnd_(nullptr), clockLabel_(nullptr), refreshButton_(nullptr), exportButton_(nullptr), statusBar_(nullptr), currentPage_(0) {}
 
 bool MainWindow::Create() {
     WNDCLASSEXW wc{};
@@ -110,6 +154,12 @@ LRESULT CALLBACK MainWindow::WindowProc(HWND hwnd, UINT message, WPARAM wParam, 
     case WM_DRAWITEM:
         self->OnDrawItem(reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
         return TRUE;
+    case WM_SETCURSOR:
+        if (LOWORD(lParam) == HTCLIENT && self->IsNavButton(reinterpret_cast<HWND>(wParam))) {
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return TRUE;
+        }
+        break;
     case WM_CTLCOLORSTATIC: {
         HDC hdc = reinterpret_cast<HDC>(wParam);
         HWND ctl = reinterpret_cast<HWND>(lParam);
@@ -125,6 +175,7 @@ LRESULT CALLBACK MainWindow::WindowProc(HWND hwnd, UINT message, WPARAM wParam, 
         return 0;
     case WM_DESTROY:
         KillTimer(hwnd, kClockTimerId);
+        data::Repository::Instance().LogLogout();
         if (gHeaderBrush) {
             DeleteObject(gHeaderBrush);
             gHeaderBrush = nullptr;
@@ -145,33 +196,47 @@ void MainWindow::OnCreate() {
     ApplyPersistedSettings();
     if (!gHeaderBrush) gHeaderBrush = CreateSolidBrush(theme::kHeaderBackground);
     CreateHeader();
-    statusBar_ = CreateWindowExW(0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, hwnd_, nullptr, instance_, nullptr);
-    SendMessageW(statusBar_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(i18n::Text(L"status.demo").c_str()));
     CreatePages();
     CreateSidebar();
     RefreshLocalizedText();
     SetTimer(hwnd_, kClockTimerId, 1000, nullptr);
-    SwitchPage(access::kPageDashboard);
+    SwitchPage(access::StartupPage(data::Repository::Instance().CurrentAccount()));
 }
 
 void MainWindow::CreateSidebar() {
     const auto account = data::Repository::Instance().CurrentAccount();
-    for (int i = 0; i < 9; ++i) {
-        if (!access::CanOpenPage(account, i)) {
+    const auto role = access::RoleForAccount(account);
+    std::wstring previousSection;
+    for (const auto& spec : kMenuSpecs) {
+        if (!CanShowMenuItem(account, spec)) {
             continue;
+        }
+        std::wstring navLabel = access::PageNavLabel(role, spec.pageIndex);
+        if (navLabel.empty()) {
+            navLabel = spec.title;
         }
         NavItem item{};
         item.id = kNavBaseId + static_cast<int>(navItems_.size());
-        item.pageIndex = i;
-        item.text = i18n::Text(kNavKeys[static_cast<size_t>(i)]);
+        item.pageIndex = spec.pageIndex;
+        item.text = navLabel;
+        item.section = spec.section;
+        item.iconIndex = spec.iconIndex;
+        item.isPlaceholder = spec.isPlaceholder;
+        item.bottomAligned = spec.bottomAligned;
+        item.startsSection = item.section != previousSection;
         item.button = ui::CreateUiButton(hwnd_, item.id, item.text, ui::ButtonKind::Navigation);
+        ui::SetButtonIconIndex(item.button, item.iconIndex);
         navItems_.push_back(item);
+        previousSection = spec.section;
     }
+    UpdateNavigationBadges();
 }
 
 void MainWindow::CreateHeader() {
     clockLabel_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_RIGHT, 0, 0, 10, 10, hwnd_, nullptr, instance_, nullptr);
     ui::AssignFontRole(clockLabel_, ui::FontRole::BodyBold);
+    refreshButton_ = ui::CreateUiButton(hwnd_, kHeaderRefreshId, L"Refresh", ui::ButtonKind::Secondary);
+    exportButton_ = ui::CreateUiButton(hwnd_, kHeaderExportId, L"Export Report", ui::ButtonKind::Primary);
 }
 
 void MainWindow::CreatePages() {
@@ -184,6 +249,10 @@ void MainWindow::CreatePages() {
     pages_.push_back(std::make_unique<AnalyticsPage>());
     pages_.push_back(std::make_unique<ReportsPage>());
     pages_.push_back(std::make_unique<SettingsPage>());
+    pages_.push_back(std::make_unique<AuditLogPage>());
+    pages_.push_back(std::make_unique<UsersRolesPage>());
+    pages_.push_back(std::make_unique<NotificationsPage>());
+    pages_.push_back(std::make_unique<ProfilePage>());
     for (auto& page : pages_) page->Create(hwnd_, instance_);
 }
 
@@ -200,37 +269,87 @@ void MainWindow::LayoutSidebar(const RECT&) {
     RECT client{};
     GetClientRect(hwnd_, &client);
     const int sidebarWidth = SidebarWidth();
-    const int top = ui::Scale(104);
-    int gap = ui::Scale(10);
-    int height = ui::Scale(42);
-    const int settingsY = client.bottom - StatusHeight() - ui::Scale(62);
-    int regularCount = 0;
+    const int brandHeight = ui::Scale(94);
+    const int menuTop = brandHeight + ui::Scale(14);
+    const int sidebarBottom = client.bottom - StatusHeight();
+    const int profileHeight = ui::Scale(74);
+    const int profileTop = sidebarBottom - profileHeight - ui::Scale(14);
+    const int settingsHeight = ui::Scale(44);
+    const int settingsY = profileTop - settingsHeight - ui::Scale(14);
+    const int menuBottom = settingsY - ui::Scale(12);
+    const int buttonX = ui::Scale(12);
+    const int buttonWidth = std::max(0, sidebarWidth - ui::Scale(24));
+
+    int itemHeight = ui::Scale(44);
+    int sectionHeight = ui::Scale(22);
+    int itemGap = ui::Scale(4);
+    int normalItems = 0;
+    int normalSections = 0;
     for (const auto& item : navItems_) {
-        if (item.pageIndex != access::kPageSettings) {
-            ++regularCount;
+        if (item.bottomAligned) {
+            continue;
+        }
+        ++normalItems;
+        if (item.startsSection) {
+            ++normalSections;
         }
     }
-    const int available = std::max(0, settingsY - top - ui::Scale(12));
-    const int needed = regularCount > 0 ? regularCount * height + (regularCount - 1) * gap : 0;
-    if (regularCount > 0 && needed > available) {
-        gap = std::max(ui::Scale(4), std::min(gap, available / std::max(regularCount * 5, 1)));
-        height = std::max(ui::Scale(30), (available - (regularCount - 1) * gap) / regularCount);
+
+    const int needed = normalItems * itemHeight + std::max(0, normalItems - 1) * itemGap + normalSections * sectionHeight;
+    const int available = std::max(0, menuBottom - menuTop);
+    if (needed > available) {
+        sectionHeight = ui::Scale(14);
+        itemGap = ui::Scale(1);
+        const int fixedSpace = normalSections * sectionHeight + std::max(0, normalItems - 1) * itemGap;
+        itemHeight = normalItems > 0
+            ? std::max(ui::Scale(28), (available - fixedSpace) / normalItems)
+            : ui::Scale(28);
     }
-    int visibleIndex = 0;
-    for (size_t i = 0; i < navItems_.size(); ++i) {
-        int y = top + visibleIndex * (height + gap);
-        if (navItems_[i].pageIndex == access::kPageSettings) {
-            y = settingsY;
+
+    int y = menuTop;
+    for (auto& item : navItems_) {
+        item.rect = RECT{};
+        item.sectionRect = RECT{};
+        if (item.bottomAligned) {
+            if (item.startsSection) {
+                item.sectionRect = RECT{ buttonX + ui::Scale(6), settingsY - sectionHeight - ui::Scale(6), sidebarWidth - buttonX, settingsY - ui::Scale(6) };
+            }
+            item.rect = RECT{ buttonX, settingsY, buttonX + buttonWidth, settingsY + settingsHeight };
         } else {
-            ++visibleIndex;
+            if (item.startsSection) {
+                item.sectionRect = RECT{ buttonX + ui::Scale(6), y, sidebarWidth - buttonX, y + sectionHeight };
+                y += sectionHeight;
+            }
+            item.rect = RECT{ buttonX, y, buttonX + buttonWidth, y + itemHeight };
+            y += itemHeight + itemGap;
         }
-        MoveWindow(navItems_[i].button, ui::Scale(18), y, std::max(0, sidebarWidth - ui::Scale(36)), height, TRUE);
+        MoveWindow(item.button, item.rect.left, item.rect.top, ui::Width(item.rect), ui::Height(item.rect), TRUE);
     }
 }
 
 void MainWindow::LayoutHeader(const RECT& client) {
     RECT clockRect = HeaderClockRect(client);
     MoveWindow(clockLabel_, clockRect.left, clockRect.top, ui::Width(clockRect), ui::Height(clockRect), TRUE);
+    const bool dashboard = currentPage_ == access::kPageDashboard;
+    const auto account = data::Repository::Instance().CurrentAccount();
+    const bool canExportDashboard = access::HasPermission(account, access::Permission::ExportReports)
+        || access::HasPermission(account, access::Permission::ExportSales);
+    ShowWindow(refreshButton_, dashboard ? SW_SHOW : SW_HIDE);
+    ShowWindow(exportButton_, (dashboard && canExportDashboard) ? SW_SHOW : SW_HIDE);
+    if (dashboard) {
+        const int buttonHeight = ui::Scale(38);
+        const int exportWidth = ui::Scale(138);
+        const int refreshWidth = ui::Scale(104);
+        const int gap = ui::Scale(10);
+        const int top = ui::Scale(38);
+        const int exportRight = clockRect.left - ui::Scale(18);
+        RECT exportRc{ exportRight - exportWidth, top, exportRight, top + buttonHeight };
+        RECT refreshRc = canExportDashboard
+            ? RECT{ exportRc.left - gap - refreshWidth, top, exportRc.left - gap, top + buttonHeight }
+            : RECT{ exportRight - refreshWidth, top, exportRight, top + buttonHeight };
+        ui::MoveWindowToRect(refreshButton_, refreshRc);
+        ui::MoveWindowToRect(exportButton_, exportRc);
+    }
 }
 
 void MainWindow::LayoutPages(const RECT& client) {
@@ -239,7 +358,10 @@ void MainWindow::LayoutPages(const RECT& client) {
 }
 
 void MainWindow::LayoutStatusBar(const RECT& client) {
-    MoveWindow(statusBar_, 0, client.bottom - StatusHeight(), client.right, StatusHeight(), TRUE);
+    if (statusBar_) {
+        ShowWindow(statusBar_, SW_HIDE);
+        MoveWindow(statusBar_, 0, client.bottom, client.right, 0, TRUE);
+    }
 }
 
 void MainWindow::OnPaint() {
@@ -252,19 +374,60 @@ void MainWindow::OnPaint() {
     const int sidebarWidth = SidebarWidth();
     RECT sidebar{ 0, 0, sidebarWidth, client.bottom };
     ui::FillRectColor(hdc, sidebar, theme::kSidebarBackground);
+    RECT sidebarBorder{ sidebarWidth - 1, 0, sidebarWidth, client.bottom };
+    ui::FillRectColor(hdc, sidebarBorder, RGB(30, 41, 59));
 
     RECT header = HeaderRect(client);
     ui::DrawRoundedPanel(hdc, header, theme::kHeaderBackground, theme::kPanelBorder, ui::Scale(18), true);
 
-    RECT logo{ ui::Scale(20), ui::Scale(24), ui::Scale(58), ui::Scale(62) };
-    ui::DrawRoundedPanel(hdc, logo, theme::kAccent, RGB(89, 137, 208), ui::Scale(12), false);
+    RECT logo{ ui::Scale(18), ui::Scale(20), ui::Scale(58), ui::Scale(60) };
+    ui::DrawRoundedPanel(hdc, logo, RGB(37, 99, 235), RGB(37, 99, 235), ui::Scale(8), false);
     ui::DrawTextLine(hdc, L"SF", logo, theme::BodyBoldFont(), RGB(255, 255, 255), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    ui::DrawTextLine(hdc, i18n::Text(L"app.brand"), ui::MakeRect(ui::Scale(70), ui::Scale(28), sidebarWidth - ui::Scale(18), ui::Scale(58)), theme::BodyBoldFont(), RGB(255, 255, 255), DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    ui::DrawTextLine(hdc, L"Sales analytics", ui::MakeRect(ui::Scale(70), ui::Scale(54), sidebarWidth - ui::Scale(18), ui::Scale(78)), theme::SmallFont(), RGB(166, 178, 195), DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    ui::DrawTextLine(hdc, L"SalesFlow", ui::MakeRect(ui::Scale(70), ui::Scale(20), sidebarWidth - ui::Scale(18), ui::Scale(44)), theme::BodyBoldFont(), RGB(255, 255, 255), DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    ui::DrawTextLine(hdc, L"Sales analytics", ui::MakeRect(ui::Scale(70), ui::Scale(45), sidebarWidth - ui::Scale(18), ui::Scale(66)), theme::SmallFont(), RGB(148, 163, 184), DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    RECT brandSeparator{ ui::Scale(16), ui::Scale(86), sidebarWidth - ui::Scale(16), ui::Scale(87) };
+    ui::FillRectColor(hdc, brandSeparator, RGB(30, 41, 59));
+
+    for (const auto& item : navItems_) {
+        if (item.startsSection && ui::Height(item.sectionRect) > 0) {
+            ui::DrawTextLine(hdc, item.section, item.sectionRect, theme::SmallBoldFont(), RGB(100, 116, 139),
+                DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        }
+    }
+
+    const int sidebarBottom = client.bottom - StatusHeight();
+    RECT profile{ ui::Scale(12), sidebarBottom - ui::Scale(88), sidebarWidth - ui::Scale(12), sidebarBottom - ui::Scale(14) };
+    ui::DrawRoundedPanel(hdc, profile, RGB(15, 23, 42), RGB(30, 41, 59), ui::Scale(8), false);
+    const auto account = data::Repository::Instance().CurrentAccount();
+    const std::wstring displayName = account.fullName.empty() ? account.username : account.fullName;
+    const std::wstring displayRole = account.role.empty() ? access::CanonicalRoleName(access::RoleForAccount(account)) : account.role;
+    RECT avatar{ profile.left + ui::Scale(10), profile.top + ui::Scale(17), profile.left + ui::Scale(46), profile.top + ui::Scale(53) };
+    ui::DrawRoundedPanel(hdc, avatar, RGB(37, 99, 235), RGB(37, 99, 235), ui::Scale(8), false);
+    ui::DrawTextLine(hdc, L"SF", avatar, theme::SmallBoldFont(), RGB(255, 255, 255), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    ui::DrawTextLine(hdc, displayName, ui::MakeRect(avatar.right + ui::Scale(10), profile.top + ui::Scale(14), profile.right - ui::Scale(10), profile.top + ui::Scale(38)),
+        theme::SmallBoldFont(), RGB(255, 255, 255), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    ui::DrawTextLine(hdc, displayRole, ui::MakeRect(avatar.right + ui::Scale(10), profile.top + ui::Scale(38), profile.right - ui::Scale(10), profile.top + ui::Scale(62)),
+        theme::SmallFont(), RGB(148, 163, 184), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 
     if (!pages_.empty()) {
         const int titleLeft = sidebarWidth + ui::Scale(34);
-        ui::DrawTextLine(hdc, LocalizedPageTitle(currentPage_), ui::MakeRect(titleLeft, ui::Scale(35), client.right - ui::Scale(330), ui::Scale(72)), theme::TitleFont(), theme::kTextPrimary, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        const int titleRight = currentPage_ == access::kPageDashboard ? client.right - ui::Scale(520) : client.right - ui::Scale(330);
+        const auto role = access::RoleForAccount(data::Repository::Instance().CurrentAccount());
+        const bool systemDashboard = currentPage_ == access::kPageDashboard
+            && role == access::AppRole::SystemAdministrator
+            && !access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::SalesView)
+            && !access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::OrdersView)
+            && !access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::InventoryView)
+            && !access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::CustomersView)
+            && !access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::AnalyticsView);
+        const std::wstring subtitle = currentPage_ == access::kPageDashboard
+            ? (systemDashboard ? L"System health, access control and security overview"
+                               : L"Business performance, sales activity and operational overview")
+            : pages_[currentPage_]->Subtitle();
+        ui::DrawTextLine(hdc, LocalizedPageTitle(currentPage_), ui::MakeRect(titleLeft, ui::Scale(28), titleRight, ui::Scale(62)),
+            theme::TitleFont(), theme::kTextPrimary, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        ui::DrawTextLine(hdc, subtitle, ui::MakeRect(titleLeft, ui::Scale(62), titleRight, ui::Scale(86)),
+            theme::SmallFont(), theme::kTextSecondary, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
 
     EndPaint(hwnd_, &ps);
@@ -272,6 +435,14 @@ void MainWindow::OnPaint() {
 
 void MainWindow::OnCommand(WPARAM wParam, LPARAM) {
     int id = LOWORD(wParam);
+    if (id == kHeaderRefreshId) {
+        RefreshCurrentPage();
+        return;
+    }
+    if (id == kHeaderExportId) {
+        ExportDashboardReport();
+        return;
+    }
     for (const auto& item : navItems_) {
         if (item.id == id) {
             SwitchPage(item.pageIndex);
@@ -283,13 +454,21 @@ void MainWindow::OnCommand(WPARAM wParam, LPARAM) {
 void MainWindow::OnDrawItem(const DRAWITEMSTRUCT* dis) {
     int id = static_cast<int>(dis->CtlID);
     bool active = false;
+    std::wstring badge;
     for (const auto& item : navItems_) {
         if (item.id == id) {
             active = item.pageIndex == currentPage_;
+            badge = item.badge;
             break;
         }
     }
     ui::DrawUiButton(dis, ui::GetButtonKind(dis->hwndItem), active);
+    if (!badge.empty()) {
+        RECT rc = dis->rcItem;
+        RECT badgeRc{ rc.right - ui::Scale(48), rc.top + ui::Scale(11), rc.right - ui::Scale(12), rc.bottom - ui::Scale(11) };
+        ui::DrawRoundedPanel(dis->hDC, badgeRc, RGB(30, 41, 59), RGB(59, 130, 246), ui::Scale(8), false);
+        ui::DrawTextLine(dis->hDC, badge, badgeRc, theme::SmallBoldFont(), RGB(191, 219, 254), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    }
 }
 
 void MainWindow::OnSettingsChanged() {
@@ -315,13 +494,7 @@ void MainWindow::ApplyPersistedSettings() {
 
 void MainWindow::RefreshLocalizedText() {
     SetWindowTextW(hwnd_, i18n::Text(L"app.windowTitle").c_str());
-    const auto role = access::RoleForAccount(data::Repository::Instance().CurrentAccount());
     for (auto& item : navItems_) {
-        std::wstring label = access::PageNavLabel(role, item.pageIndex);
-        if (label.empty() && item.pageIndex >= 0 && item.pageIndex < static_cast<int>(kNavKeys.size())) {
-            label = i18n::Text(kNavKeys[static_cast<size_t>(item.pageIndex)]);
-        }
-        item.text = label;
         SetWindowTextW(item.button, item.text.c_str());
         InvalidateRect(item.button, nullptr, TRUE);
     }
@@ -341,10 +514,7 @@ void MainWindow::RefreshThemeResources() {
         wchar_t className[64]{};
         GetClassNameW(child, className, 64);
         if (std::wcscmp(className, WC_LISTVIEWW) == 0) {
-            ListView_SetBkColor(child, theme::kPanelBackground);
-            ListView_SetTextBkColor(child, theme::kPanelBackground);
-            ListView_SetTextColor(child, theme::kTextPrimary);
-            InvalidateRect(child, nullptr, TRUE);
+            ui::ApplyStandardTableStyle(child);
         } else {
             InvalidateRect(child, nullptr, TRUE);
         }
@@ -353,6 +523,12 @@ void MainWindow::RefreshThemeResources() {
 }
 
 std::wstring MainWindow::LocalizedPageTitle(int index) const {
+    if (index == access::kPageProducts) {
+        return L"Inventory";
+    }
+    if (index == access::kPageClients) {
+        return L"Customers";
+    }
     const auto role = access::RoleForAccount(data::Repository::Instance().CurrentAccount());
     const std::wstring roleTitle = access::PageTitle(role, index);
     if (!roleTitle.empty()) {
@@ -367,22 +543,47 @@ std::wstring MainWindow::LocalizedPageTitle(int index) const {
 void MainWindow::SwitchPage(int index) {
     if (index < 0 || index >= static_cast<int>(pages_.size())) return;
     if (!access::CanOpenPage(data::Repository::Instance().CurrentAccount(), index)) {
-        for (const auto& item : navItems_) {
-            if (access::CanOpenPage(data::Repository::Instance().CurrentAccount(), item.pageIndex)) {
-                index = item.pageIndex;
-                break;
-            }
-        }
+        const std::wstring page = LocalizedPageTitle(index);
+        data::Repository::Instance().LogAccessDenied(L"navigation", L"Open page denied: " + page);
+        MessageBoxW(hwnd_, L"Access denied. You do not have permission to view this section.", page.c_str(), MB_OK | MB_ICONWARNING);
+        return;
     }
     currentPage_ = index;
     for (size_t i = 0; i < pages_.size(); ++i) pages_[i]->Show(static_cast<int>(i) == currentPage_);
     pages_[currentPage_]->Activate();
+    UpdateNavigationBadges();
     for (const auto& item : navItems_) InvalidateRect(item.button, nullptr, TRUE);
     UpdateHeader();
     RECT client{};
     GetClientRect(hwnd_, &client);
     RECT headerRect = HeaderRect(client);
     InvalidateRect(hwnd_, &headerRect, FALSE);
+    RECT sidebarRect{ 0, 0, SidebarWidth(), client.bottom };
+    InvalidateRect(hwnd_, &sidebarRect, FALSE);
+    LayoutHeader(client);
+}
+
+bool MainWindow::IsNavButton(HWND hwnd) const {
+    return std::any_of(navItems_.begin(), navItems_.end(), [hwnd](const NavItem& item) {
+        return item.button == hwnd;
+    });
+}
+
+void MainWindow::RefreshCurrentPage() {
+    if (currentPage_ >= 0 && currentPage_ < static_cast<int>(pages_.size())) {
+        pages_[currentPage_]->Activate();
+        UpdateNavigationBadges();
+        InvalidateRect(pages_[currentPage_]->Handle(), nullptr, FALSE);
+    }
+}
+
+void MainWindow::ExportDashboardReport() {
+    const std::wstring path = data::Repository::Instance().ExportDailySalesSummaryReport();
+    if (path.empty()) {
+        MessageBoxW(hwnd_, data::Repository::Instance().LastError().c_str(), L"Export Report", MB_OK | MB_ICONWARNING);
+        return;
+    }
+    MessageBoxW(hwnd_, (L"Report exported:\n" + path).c_str(), L"Export Report", MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::UpdateHeader() {
@@ -392,6 +593,23 @@ void MainWindow::UpdateHeader() {
     wchar_t buffer[128]{};
     wcsftime(buffer, 128, L"%d %b %Y  |  %H:%M:%S", &tm);
     SetWindowTextW(clockLabel_, buffer);
+}
+
+void MainWindow::UpdateNavigationBadges() {
+    int openTasks = 0;
+    if (data::Repository::Instance().HasCurrentAccount()
+        && access::CanOpenPage(data::Repository::Instance().CurrentAccount(), access::kPageNotifications)) {
+        openTasks = static_cast<int>(data::Repository::Instance().LoadOpenTasks().size());
+    }
+
+    for (auto& item : navItems_) {
+        if (item.pageIndex == access::kPageNotifications && openTasks > 0) {
+            item.badge = openTasks > 99 ? L"99+" : std::to_wstring(openTasks);
+        } else {
+            item.badge.clear();
+        }
+        InvalidateRect(item.button, nullptr, TRUE);
+    }
 }
 
 void MainWindow::OnDpiChanged(WPARAM wParam, LPARAM lParam) {

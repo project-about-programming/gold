@@ -19,6 +19,14 @@ private:
         int id;
         int pageIndex;
         std::wstring text;
+        std::wstring section;
+        std::wstring badge;
+        int iconIndex;
+        bool isPlaceholder;
+        bool bottomAligned;
+        bool startsSection;
+        RECT sectionRect;
+        RECT rect;
         HWND button;
     };
 
@@ -44,10 +52,16 @@ private:
     void LayoutHeader(const RECT& client);
     void LayoutPages(const RECT& client);
     void LayoutStatusBar(const RECT& client);
+    bool IsNavButton(HWND hwnd) const;
+    void RefreshCurrentPage();
+    void ExportDashboardReport();
+    void UpdateNavigationBadges();
 
     HINSTANCE instance_;
     HWND hwnd_;
     HWND clockLabel_;
+    HWND refreshButton_;
+    HWND exportButton_;
     HWND statusBar_;
     std::vector<NavItem> navItems_;
     std::vector<std::unique_ptr<PageBase>> pages_;

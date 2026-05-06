@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cwctype>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -97,8 +98,51 @@ constexpr SeedUser kUsers[] = {
     {3, L"Marina Ivanova", L"m.ivanova", L"m.ivanova@company.example", L"Director", L"Active", L"2026-04-05 09:32", L"2025-01-12"},
     {4, L"Daniel Belov", L"d.belov", L"d.belov@company.example", L"Head of Sales", L"Active", L"2026-04-04 17:41", L"2025-02-01"},
     {5, L"Elena Kozlova", L"e.kozlova", L"e.kozlova@company.example", L"Sales Manager", L"Active", L"2026-03-29 15:04", L"2025-02-04"},
-    {6, L"Victor Morozov", L"v.morozov", L"v.morozov@company.example", L"Product Manager", L"Active", L"2026-04-05 08:12", L"2025-02-15"}
+    {6, L"Victor Morozov", L"v.morozov", L"v.morozov@company.example", L"Product Manager", L"Active", L"2026-04-05 08:12", L"2025-02-15"},
+    {7, L"Nikita Orlov", L"n.orlov", L"n.orlov@company.example", L"Cashier", L"Active", L"2026-04-05 10:21", L"2025-03-01"},
+    {8, L"Olga Sidorova", L"o.sidorova", L"o.sidorova@company.example", L"Warehouse Worker", L"Active", L"2026-04-05 07:55", L"2025-03-05"},
+    {9, L"Timur Akhmedov", L"t.akhmedov", L"t.akhmedov@company.example", L"Accountant", L"Active", L"2026-04-04 16:10", L"2025-03-12"},
+    {10, L"Anna Volkova", L"a.volkova", L"a.volkova@company.example", L"Analyst", L"Active", L"2026-04-05 13:02", L"2025-03-20"},
+    {11, L"Super Admin", L"superadmin", L"superadmin@salesflow.local", L"SuperAdmin", L"Active", L"Never", L"2026-04-01"},
+    {12, L"System Administrator", L"sysadmin", L"sysadmin@salesflow.local", L"System Administrator", L"Active", L"Never", L"2026-04-01"},
+    {13, L"Director Demo", L"director", L"director@salesflow.local", L"Director", L"Active", L"Never", L"2026-04-01"},
+    {14, L"Manager Demo", L"manager", L"manager@salesflow.local", L"Sales Manager", L"Active", L"Never", L"2026-04-01"},
+    {15, L"Cashier Demo", L"cashier", L"cashier@salesflow.local", L"Cashier", L"Active", L"Never", L"2026-04-01"},
+    {16, L"Warehouse Demo", L"warehouse", L"warehouse@salesflow.local", L"Warehouse Worker", L"Active", L"Never", L"2026-04-01"},
+    {17, L"Accountant Demo", L"accountant", L"accountant@salesflow.local", L"Accountant", L"Active", L"Never", L"2026-04-01"},
+    {18, L"Analyst Demo", L"analyst", L"analyst@salesflow.local", L"Analyst", L"Active", L"Never", L"2026-04-01"}
 };
+
+bool EqualsIgnoreCase(const std::wstring& left, const wchar_t* right) {
+    if (right == nullptr) {
+        return false;
+    }
+
+    const std::wstring expected(right);
+    if (left.size() != expected.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < left.size(); ++i) {
+        if (std::towlower(left[i]) != std::towlower(expected[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsSeededDemoAccount(const std::wstring& username) {
+    if (EqualsIgnoreCase(username, L"admin")) {
+        return true;
+    }
+
+    for (const auto& user : kUsers) {
+        if (EqualsIgnoreCase(username, user.username)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 constexpr SeedClient kClients[] = {
     {1, L"Northwind Retail", L"Elena Sokolova", L"elena.sokolova@northwind.example", L"+1 312 555 0142", L"Key Account", L"North America", 1, 428000.0, L"Anastasia Petrova"},
@@ -231,6 +275,80 @@ std::wstring CurrentTimestamp() {
     return buffer;
 }
 
+int DaysFromToday(const std::wstring& isoDate) {
+    if (isoDate.size() < 10) {
+        return 99999;
+    }
+    try {
+        std::tm expiry{};
+        expiry.tm_year = std::stoi(isoDate.substr(0, 4)) - 1900;
+        expiry.tm_mon = std::stoi(isoDate.substr(5, 2)) - 1;
+        expiry.tm_mday = std::stoi(isoDate.substr(8, 2));
+        expiry.tm_isdst = -1;
+
+        std::time_t now = std::time(nullptr);
+        std::tm today{};
+        localtime_s(&today, &now);
+        today.tm_hour = 0;
+        today.tm_min = 0;
+        today.tm_sec = 0;
+        today.tm_isdst = -1;
+
+        const std::time_t expiryTime = std::mktime(&expiry);
+        const std::time_t todayTime = std::mktime(&today);
+        if (expiryTime == static_cast<std::time_t>(-1) || todayTime == static_cast<std::time_t>(-1)) {
+            return 99999;
+        }
+        return static_cast<int>(std::difftime(expiryTime, todayTime) / (60 * 60 * 24));
+    } catch (const std::exception&) {
+        return 99999;
+    }
+}
+
+std::wstring InventoryStatusFor(int stock, int reorderLevel, const std::wstring& manualStatus, const std::wstring& expiryDate) {
+    if (manualStatus == L"Discontinued" || manualStatus == L"Archived") {
+        return manualStatus;
+    }
+    if (DaysFromToday(expiryDate) < 0) {
+        return L"Expired";
+    }
+    if (stock <= 0) {
+        return L"Out of Stock";
+    }
+    if (stock <= reorderLevel) {
+        return L"Low Stock";
+    }
+    return L"In Stock";
+}
+
+double MarginPercent(double unitPrice, double costPrice) {
+    return unitPrice > 0.0 ? ((unitPrice - costPrice) / unitPrice) * 100.0 : 0.0;
+}
+
+std::wstring AuditSeverityFor(const std::wstring& entityType, const std::wstring& action) {
+    if (action == L"Login" || action == L"Create" || action == L"Update" || action == L"UpdateStatus"
+        || action == L"Export" || action == L"Import" || action == L"Complete" || action == L"Register"
+        || action == L"ResetPassword" || action == L"StockIn" || action == L"StockOut") {
+        if (entityType == L"settings") {
+            return L"Warning";
+        }
+        return L"Info";
+    }
+    if (action == L"Denied" || action == L"LoginFailed" || action == L"LoginBlocked"
+        || action == L"ChangeRole" || action == L"Backup" || action == L"Cancel"
+        || action == L"Refund" || action == L"StockOutWarning") {
+        return L"Warning";
+    }
+    if (action == L"Delete" || action == L"ToggleStatus" || action == L"ClearBusinessData"
+        || action.find(L"Clear") != std::wstring::npos || action.find(L"Restore") != std::wstring::npos) {
+        return L"Critical";
+    }
+    if (entityType == L"settings") {
+        return L"Warning";
+    }
+    return L"Info";
+}
+
 std::wstring DemoPasswordHash(const std::wstring& password) {
     static constexpr wchar_t kSalt[] = L"SalesFlow::2026::auth";
     std::wstring payload = password;
@@ -266,6 +384,46 @@ double ParseDouble(const std::wstring& value, double fallback = 0.0) {
     } catch (const std::exception&) {
         return fallback;
     }
+}
+
+std::wstring NormalizeOrderStatus(const std::wstring& status) {
+    if (status == L"Processing") {
+        return L"Pending";
+    }
+    if (status.empty() || status == L"All Statuses") {
+        return L"Pending";
+    }
+    return status;
+}
+
+std::wstring NextOrderStatus(const std::wstring& status) {
+    const std::wstring current = NormalizeOrderStatus(status);
+    if (current == L"Draft") return L"Pending";
+    if (current == L"Pending") return L"Confirmed";
+    if (current == L"Confirmed") return L"Packed";
+    if (current == L"Packed") return L"Shipped";
+    if (current == L"Shipped") return L"Delivered";
+    if (current == L"Delivered") return L"Completed";
+    return current;
+}
+
+bool IsFinalOrderStatus(const std::wstring& status) {
+    const std::wstring current = NormalizeOrderStatus(status);
+    return current == L"Completed" || current == L"Cancelled" || current == L"Refunded";
+}
+
+std::wstring PaymentStatusFor(double paid, double total) {
+    if (paid <= 0.005) {
+        return L"Unpaid";
+    }
+    if (paid + 0.005 < total) {
+        return L"Partial";
+    }
+    return L"Paid";
+}
+
+double RoundMoney(double value) {
+    return std::round(value * 100.0) / 100.0;
 }
 
 std::vector<std::wstring> SplitCsvLine(const std::wstring& line) {
@@ -373,10 +531,14 @@ std::string BuildSeedScript() {
     sql << "DELETE FROM audit_log;";
     sql << "DELETE FROM tasks;";
     sql << "DELETE FROM pipeline_deals;";
+    sql << "DELETE FROM inventory_alerts;";
+    sql << "DELETE FROM stock_movements;";
     sql << "DELETE FROM sales;";
     sql << "DELETE FROM orders;";
     sql << "DELETE FROM employees;";
     sql << "DELETE FROM products;";
+    sql << "DELETE FROM categories;";
+    sql << "DELETE FROM suppliers;";
     sql << "DELETE FROM clients;";
     sql << "DELETE FROM users;";
     sql << "DELETE FROM app_settings;";
@@ -611,7 +773,8 @@ bool Repository::ResetDemoData() {
     if (!EnsureInitialized()) {
         return false;
     }
-    return SeedDemoData();
+    return SeedDemoData() && EnsureInventoryCatalogData() && RefreshInventoryAlerts()
+        && EnsureDefaultAdminAccount() && EnsureDemoAccountPasswords();
 }
 
 bool Repository::ClearBusinessData() {
@@ -626,10 +789,14 @@ bool Repository::ClearBusinessData() {
     sql << "BEGIN IMMEDIATE;";
     sql << "DELETE FROM tasks;";
     sql << "DELETE FROM pipeline_deals;";
+    sql << "DELETE FROM inventory_alerts;";
+    sql << "DELETE FROM stock_movements;";
     sql << "DELETE FROM sales;";
     sql << "DELETE FROM orders;";
     sql << "DELETE FROM employees;";
     sql << "DELETE FROM products;";
+    sql << "DELETE FROM categories;";
+    sql << "DELETE FROM suppliers;";
     sql << "DELETE FROM clients;";
     sql << "COMMIT;";
 
@@ -669,10 +836,6 @@ DashboardSnapshot Repository::LoadDashboardSnapshot() {
     const int shipments = ownSalesScope
         ? QueryBoundInt(db_, "SELECT COUNT(*) FROM sales JOIN employees ON employees.id = sales.employee_id WHERE sales.status = 'Pending' AND lower(employees.full_name) = lower(?1);", dashboardOwner)
         : db_.QueryScalarInt("SELECT COUNT(*) FROM orders WHERE status IN ('Processing', 'Confirmed', 'Packed');", 0);
-    const int keyClients = ownSalesScope
-        ? QueryBoundInt(db_, "SELECT COUNT(*) FROM clients WHERE segment = 'Key Account' AND is_active = 1 AND lower(account_manager) = lower(?1);", dashboardOwner)
-        : db_.QueryScalarInt("SELECT COUNT(*) FROM clients WHERE segment = 'Key Account' AND is_active = 1;", 0);
-
     SqliteStatement basketStatement;
     double averageBasket = 0.0;
     const std::string basketQuery = ownSalesScope
@@ -749,12 +912,20 @@ DashboardSnapshot Repository::LoadDashboardSnapshot() {
         snapshot.metrics.revenueCaption = (delta >= 0.0 ? L"+" : L"") + FormatPercent(delta);
         snapshot.metrics.revenueCaption += UiText(L" versus previous quarter", L" к предыдущему кварталу");
     } else {
-        snapshot.metrics.revenueCaption = UiText(L"SQL-backed trend is active", L"SQL-тренд активен");
+        snapshot.metrics.revenueCaption = totalRevenue <= 0.0
+            ? UiText(L"No revenue recorded yet", L"Выручка пока не записана")
+            : UiText(L"Revenue for selected period", L"Выручка за выбранный период");
     }
 
-    snapshot.metrics.ordersCaption = FormatNumber(shipments) + UiText(L" orders awaiting shipment", L" заказов ожидают отгрузки");
-    snapshot.metrics.productsCaption = UiText(L"Average basket size: ", L"Средний размер корзины: ") + FormatAverage(averageBasket) + UiText(L" units", L" ед.");
-    snapshot.metrics.clientsCaption = FormatNumber(keyClients) + UiText(L" key accounts under active monitoring", L" ключевых клиентов под наблюдением");
+    snapshot.metrics.ordersCaption = shipments <= 0
+        ? UiText(L"No orders awaiting shipment", L"Нет заказов на отгрузку")
+        : FormatNumber(shipments) + UiText(L" orders awaiting shipment", L" заказов ожидают отгрузки");
+    snapshot.metrics.productsCaption = productsSold <= 0
+        ? UiText(L"No products sold yet", L"Проданных товаров пока нет")
+        : UiText(L"Average basket size: ", L"Средний размер корзины: ") + FormatAverage(averageBasket) + UiText(L" units", L" ед.");
+    snapshot.metrics.clientsCaption = activeClients <= 0
+        ? UiText(L"No active clients yet", L"Активных клиентов пока нет")
+        : FormatNumber(activeClients) + UiText(L" active customers", L" активных клиентов");
 
     SqliteStatement topProducts;
     const std::string topProductsQuery = ownSalesScope
@@ -827,11 +998,11 @@ DashboardSnapshot Repository::LoadDashboardSnapshot() {
             "    FROM tasks "
             "    WHERE status <> 'Done' "
             "    UNION ALL "
-            "    SELECT 'Stock', name, supplier, CAST(stock AS TEXT) || '/' || CAST(reorder_level AS TEXT), "
-            "           CASE WHEN stock <= reorder_level THEN 'High' WHEN stock <= reorder_level + 6 THEN 'Medium' ELSE 'Watch' END, "
+            "    SELECT 'Stock', COALESCE(products.name, ''), 'Inventory', inventory_alerts.alert_type, inventory_alerts.severity, "
             "           1 "
-            "    FROM products "
-            "    WHERE stock <= reorder_level + 8 "
+            "    FROM inventory_alerts "
+            "    LEFT JOIN products ON products.id = inventory_alerts.product_id "
+            "    WHERE inventory_alerts.status = 'Open' "
             "    UNION ALL "
             "    SELECT 'Deal', pipeline_deals.lead_name, COALESCE(employees.full_name, 'Unassigned'), pipeline_deals.updated_at, pipeline_deals.stage, "
             "           2 "
@@ -871,20 +1042,21 @@ std::vector<SalesRecord> Repository::LoadSales(const SalesFilter& filter) {
 
     SqliteStatement statement;
     if (!db_.Prepare(
-            "SELECT sales.id, sales.sale_code, employees.full_name, clients.company_name, products.name, "
-            "       sales.channel, COALESCE(sales.quantity, 1), COALESCE(sales.unit_price, sales.revenue), "
+            "SELECT sales.id, sales.sale_code, COALESCE(employees.full_name, 'SalesFlow User'), clients.company_name, "
+            "       COALESCE((SELECT CASE WHEN COUNT(*) = 1 THEN MAX(product_name) ELSE CAST(COUNT(*) AS TEXT) || ' items' END FROM sale_items WHERE sale_items.sale_id = sales.id), products.name), "
+            "       sales.channel, COALESCE((SELECT SUM(quantity) FROM sale_items WHERE sale_items.sale_id = sales.id), sales.quantity), COALESCE(sales.unit_price, sales.revenue), "
             "       sales.revenue, COALESCE(sales.total_amount, sales.revenue), sales.margin_percent, "
             "       sales.sale_date, sales.status, COALESCE(sales.payment_method, 'Card'), COALESCE(sales.cancellation_reason, '') "
             "FROM sales "
-            "JOIN employees ON employees.id = sales.employee_id "
+            "LEFT JOIN employees ON employees.id = sales.employee_id "
             "JOIN clients ON clients.id = sales.client_id "
-            "JOIN products ON products.id = sales.product_id "
-            "WHERE (?1 = '' OR lower(sales.sale_code || ' ' || employees.full_name || ' ' || clients.company_name || ' ' || products.name) LIKE lower(?2)) "
+            "LEFT JOIN products ON products.id = sales.product_id "
+            "WHERE (?1 = '' OR lower(sales.sale_code || ' ' || COALESCE(employees.full_name, '') || ' ' || clients.company_name || ' ' || COALESCE(products.name, '') || ' ' || COALESCE((SELECT group_concat(product_name, ' ') FROM sale_items WHERE sale_items.sale_id = sales.id), '')) LIKE lower(?2)) "
             "  AND (?3 = '' OR ?3 = 'All Statuses' OR sales.status = ?3) "
-            "  AND (?4 = '' OR ?4 = 'All Channels' OR sales.channel = ?4) "
+            "  AND (?4 = '' OR ?4 = 'All Channels' OR sales.channel = ?4 OR sales.payment_method = ?4) "
             "  AND (?5 = '' OR sales.sale_date >= ?5) "
             "  AND (?6 = '' OR sales.sale_date <= ?6) "
-            "  AND (?7 = '' OR lower(employees.full_name) = lower(?7)) "
+            "  AND (?7 = '' OR lower(COALESCE(employees.full_name, '')) = lower(?7)) "
             "ORDER BY sales.sale_date DESC, sales.id DESC;",
             &statement,
             &lastError_)) {
@@ -938,15 +1110,26 @@ std::vector<OrderRecord> Repository::LoadOrders(const OrderFilter& filter) {
 
     SqliteStatement statement;
     if (!db_.Prepare(
-            "SELECT orders.id, orders.order_code, clients.company_name, products.name, orders.quantity, "
-            "       orders.total_price, orders.order_date, orders.status, orders.priority "
+            "SELECT orders.id, orders.order_code, clients.company_name, "
+            "       COALESCE((SELECT CASE WHEN COUNT(*) = 1 THEN MAX(product_name) ELSE CAST(COUNT(*) AS TEXT) || ' items' END FROM order_items WHERE order_items.order_id = orders.id), products.name), "
+            "       COALESCE((SELECT SUM(quantity) FROM order_items WHERE order_items.order_id = orders.id), orders.quantity), "
+            "       COALESCE((SELECT COUNT(*) FROM order_items WHERE order_items.order_id = orders.id), 1), "
+            "       COALESCE(orders.total_amount, orders.total_price), orders.order_date, orders.status, "
+            "       COALESCE(orders.payment_status, 'Unpaid'), COALESCE(orders.payment_method, 'Cash'), COALESCE(employees.full_name, users.full_name, 'Unassigned'), orders.priority, "
+            "       orders.client_id, COALESCE((SELECT product_id FROM order_items WHERE order_items.order_id = orders.id ORDER BY id LIMIT 1), orders.product_id), "
+            "       COALESCE((SELECT discount_percent FROM order_items WHERE order_items.order_id = orders.id ORDER BY id LIMIT 1), 0), "
+            "       COALESCE((SELECT SUM(amount) FROM payments WHERE payments.order_id = orders.id AND payments.sale_id IS NULL), 0), COALESCE(orders.notes, '') "
             "FROM orders "
             "JOIN clients ON clients.id = orders.client_id "
-            "JOIN products ON products.id = orders.product_id "
-            "WHERE (?1 = '' OR lower(orders.order_code || ' ' || clients.company_name || ' ' || products.name) LIKE lower(?2)) "
+            "LEFT JOIN products ON products.id = orders.product_id "
+            "LEFT JOIN employees ON employees.id = orders.assigned_to "
+            "LEFT JOIN users ON users.id = orders.created_by "
+            "WHERE (?1 = '' OR lower(orders.order_code || ' ' || clients.company_name || ' ' || COALESCE(products.name, '') || ' ' || COALESCE((SELECT group_concat(product_name, ' ') FROM order_items WHERE order_items.order_id = orders.id), '')) LIKE lower(?2)) "
             "  AND (?3 = '' OR ?3 = 'All Statuses' OR orders.status = ?3) "
-            "  AND (?4 = '' OR orders.order_date >= ?4) "
-            "  AND (?5 = '' OR orders.order_date <= ?5) "
+            "  AND (?4 = '' OR ?4 = 'All Payments' OR orders.payment_status = ?4) "
+            "  AND (?5 = '' OR orders.order_date >= ?5) "
+            "  AND (?6 = '' OR orders.order_date <= ?6) "
+            "  AND (?7 = '' OR lower(clients.company_name) LIKE lower(?8)) "
             "ORDER BY orders.order_date DESC, orders.id DESC;",
             &statement,
             &lastError_)) {
@@ -957,8 +1140,11 @@ std::vector<OrderRecord> Repository::LoadOrders(const OrderFilter& filter) {
     statement.BindText(1, filter.search);
     statement.BindText(2, searchPattern);
     statement.BindText(3, filter.status);
-    statement.BindText(4, filter.fromDateIso);
-    statement.BindText(5, filter.toDateIso);
+    statement.BindText(4, filter.paymentStatus);
+    statement.BindText(5, filter.fromDateIso);
+    statement.BindText(6, filter.toDateIso);
+    statement.BindText(7, filter.customer);
+    statement.BindText(8, filter.customer.empty() ? L"" : L"%" + filter.customer + L"%");
 
     while (statement.Step() == SQLITE_ROW) {
         OrderRecord record{};
@@ -967,11 +1153,20 @@ std::vector<OrderRecord> Repository::LoadOrders(const OrderFilter& filter) {
         record.client = statement.ColumnText(2);
         record.product = statement.ColumnText(3);
         record.quantity = statement.ColumnInt(4);
-        record.totalPrice = statement.ColumnDouble(5);
-        record.dateIso = statement.ColumnText(6);
+        record.itemsCount = statement.ColumnInt(5);
+        record.totalPrice = statement.ColumnDouble(6);
+        record.dateIso = statement.ColumnText(7);
         record.dateDisplay = FormatDisplayDate(record.dateIso);
-        record.status = statement.ColumnText(7);
-        record.priority = statement.ColumnText(8);
+        record.status = statement.ColumnText(8);
+        record.paymentStatus = statement.ColumnText(9);
+        record.paymentMethod = statement.ColumnText(10);
+        record.owner = statement.ColumnText(11);
+        record.priority = statement.ColumnText(12);
+        record.customerId = statement.ColumnInt(13);
+        record.productId = statement.ColumnInt(14);
+        record.discountPercent = statement.ColumnDouble(15);
+        record.paymentAmount = statement.ColumnDouble(16);
+        record.notes = statement.ColumnText(17);
         rows.push_back(record);
     }
 
@@ -984,19 +1179,23 @@ std::vector<ProductRecord> Repository::LoadProducts(const ProductFilter& filter)
         return rows;
     }
     if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::OpenProducts)) {
-        SetLastError(L"Products are not available for role: " + currentAccount_.role);
+        SetLastError(L"Inventory is not available for role: " + currentAccount_.role);
         return rows;
     }
 
     SqliteStatement statement;
     if (!db_.Prepare(
-            "SELECT id, sku, name, category, stock, reorder_level, price, COALESCE(cost, 0), COALESCE(discount_percent, 0), status, supplier, margin_percent, "
-            "       expiration_date, COALESCE(batch_code, '') "
-            "FROM products "
-            "WHERE (?1 = '' OR lower(sku || ' ' || name || ' ' || category || ' ' || supplier) LIKE lower(?2)) "
-            "  AND (?3 = '' OR ?3 = 'All Categories' OR category = ?3) "
-            "  AND (?4 = '' OR ?4 = 'All Statuses' OR status = ?4) "
-            "ORDER BY CASE status WHEN 'Low Stock' THEN 0 WHEN 'Active' THEN 1 ELSE 2 END, name ASC;",
+            "SELECT p.id, COALESCE(p.category_id, 0), COALESCE(p.supplier_id, 0), p.sku, p.name, "
+            "       COALESCE(c.name, p.category), p.stock, p.reorder_level, p.price, COALESCE(p.cost, 0), "
+            "       COALESCE(p.discount_percent, 0), p.status, COALESCE(s.name, p.supplier), p.margin_percent, "
+            "       p.expiration_date, COALESCE(p.batch_code, ''), COALESCE(p.description, '') "
+            "FROM products p "
+            "LEFT JOIN categories c ON c.id = p.category_id "
+            "LEFT JOIN suppliers s ON s.id = p.supplier_id "
+            "WHERE (?1 = '' OR lower(p.sku || ' ' || p.name || ' ' || COALESCE(c.name, p.category) || ' ' || COALESCE(s.name, p.supplier)) LIKE lower(?2)) "
+            "  AND (?3 = '' OR ?3 = 'All Categories' OR COALESCE(c.name, p.category) = ?3) "
+            "  AND (?4 = '' OR ?4 = 'All Suppliers' OR COALESCE(s.name, p.supplier) = ?4) "
+            "ORDER BY p.name ASC;",
             &statement,
             &lastError_)) {
         return rows;
@@ -1006,29 +1205,197 @@ std::vector<ProductRecord> Repository::LoadProducts(const ProductFilter& filter)
     statement.BindText(1, filter.search);
     statement.BindText(2, searchPattern);
     statement.BindText(3, filter.category);
-    statement.BindText(4, filter.status);
+    statement.BindText(4, filter.supplier);
 
     while (statement.Step() == SQLITE_ROW) {
         ProductRecord record{};
         record.id = statement.ColumnInt(0);
-        record.sku = statement.ColumnText(1);
-        record.name = statement.ColumnText(2);
-        record.category = statement.ColumnText(3);
-        record.stock = statement.ColumnInt(4);
-        record.reorderLevel = statement.ColumnInt(5);
-        record.price = statement.ColumnDouble(6);
-        record.cost = statement.ColumnDouble(7);
-        record.discountPercent = statement.ColumnDouble(8);
-        record.status = statement.ColumnText(9);
-        record.supplier = statement.ColumnText(10);
-        record.marginPercent = statement.ColumnDouble(11);
+        record.categoryId = statement.ColumnInt(1);
+        record.supplierId = statement.ColumnInt(2);
+        record.sku = statement.ColumnText(3);
+        record.name = statement.ColumnText(4);
+        record.category = statement.ColumnText(5);
+        record.stock = statement.ColumnInt(6);
+        record.reorderLevel = statement.ColumnInt(7);
+        record.price = statement.ColumnDouble(8);
+        record.cost = statement.ColumnDouble(9);
+        record.discountPercent = statement.ColumnDouble(10);
+        record.status = InventoryStatusFor(record.stock, record.reorderLevel, statement.ColumnText(11), statement.ColumnText(14));
+        record.supplier = statement.ColumnText(12);
+        record.marginPercent = MarginPercent(record.price, record.cost);
         record.profitPerUnit = record.price - record.cost - (record.price * record.discountPercent / 100.0);
-        record.expirationDateIso = statement.ColumnText(12);
+        record.expirationDateIso = statement.ColumnText(14);
         record.expirationDateDisplay = FormatDisplayDate(record.expirationDateIso);
-        record.batchCode = statement.ColumnText(13);
-        rows.push_back(record);
+        record.batchCode = statement.ColumnText(15);
+        record.description = statement.ColumnText(16);
+
+        const bool statusMatch = filter.status.empty() || filter.status == L"All Statuses" || record.status == filter.status
+            || (filter.status == L"Active" && record.status == L"In Stock");
+        const int days = DaysFromToday(record.expirationDateIso);
+        const bool expiryMatch = filter.expiryStatus.empty() || filter.expiryStatus == L"All"
+            || (filter.expiryStatus == L"Valid" && days > 30)
+            || (filter.expiryStatus == L"Expiring Soon" && days >= 0 && days <= 30)
+            || (filter.expiryStatus == L"Expired" && days < 0);
+        if (statusMatch && expiryMatch) {
+            rows.push_back(record);
+        }
     }
 
+    std::sort(rows.begin(), rows.end(), [](const ProductRecord& left, const ProductRecord& right) {
+        auto rank = [](const std::wstring& status) {
+            if (status == L"Out of Stock" || status == L"Expired") return 0;
+            if (status == L"Low Stock") return 1;
+            if (status == L"In Stock") return 2;
+            return 3;
+        };
+        const int leftRank = rank(left.status);
+        const int rightRank = rank(right.status);
+        return leftRank == rightRank ? left.name < right.name : leftRank < rightRank;
+    });
+    return rows;
+}
+
+InventorySummary Repository::LoadInventorySummary(const ProductFilter& filter) {
+    InventorySummary summary{};
+    const auto products = LoadProducts(filter);
+    for (const auto& product : products) {
+        ++summary.catalogItems;
+        if (product.status == L"Low Stock") {
+            ++summary.lowStock;
+        }
+        if (product.status == L"Out of Stock") {
+            ++summary.outOfStock;
+        }
+        if (product.status == L"In Stock" || product.status == L"Low Stock") {
+            ++summary.activeItems;
+        }
+        if (DaysFromToday(product.expirationDateIso) >= 0 && DaysFromToday(product.expirationDateIso) <= 30) {
+            ++summary.expiringSoon;
+        }
+        summary.stockValue += static_cast<double>(product.stock) * product.cost;
+    }
+    return summary;
+}
+
+std::vector<CategoryRecord> Repository::LoadCategories() {
+    std::vector<CategoryRecord> rows;
+    if (!EnsureInitialized()) {
+        return rows;
+    }
+    SqliteStatement statement;
+    if (!db_.Prepare("SELECT id, name, description, status FROM categories ORDER BY name ASC;", &statement, &lastError_)) {
+        return rows;
+    }
+    while (statement.Step() == SQLITE_ROW) {
+        CategoryRecord record{};
+        record.id = statement.ColumnInt(0);
+        record.name = statement.ColumnText(1);
+        record.description = statement.ColumnText(2);
+        record.status = statement.ColumnText(3);
+        rows.push_back(record);
+    }
+    return rows;
+}
+
+std::vector<SupplierRecord> Repository::LoadSuppliers() {
+    std::vector<SupplierRecord> rows;
+    if (!EnsureInitialized()) {
+        return rows;
+    }
+    SqliteStatement statement;
+    if (!db_.Prepare("SELECT id, name, contact_name, phone, email, address, status FROM suppliers ORDER BY name ASC;", &statement, &lastError_)) {
+        return rows;
+    }
+    while (statement.Step() == SQLITE_ROW) {
+        SupplierRecord record{};
+        record.id = statement.ColumnInt(0);
+        record.name = statement.ColumnText(1);
+        record.contactName = statement.ColumnText(2);
+        record.phone = statement.ColumnText(3);
+        record.email = statement.ColumnText(4);
+        record.address = statement.ColumnText(5);
+        record.status = statement.ColumnText(6);
+        rows.push_back(record);
+    }
+    return rows;
+}
+
+std::vector<StockMovementRecord> Repository::LoadStockMovements(int productId, int limit) {
+    std::vector<StockMovementRecord> rows;
+    if (!EnsureInitialized()) {
+        return rows;
+    }
+    if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::InventoryView)) {
+        SetLastError(L"Inventory movement history is not available for role: " + currentAccount_.role);
+        return rows;
+    }
+    SqliteStatement statement;
+    if (!db_.Prepare(
+            "SELECT m.id, m.product_id, m.created_at, p.sku, p.name, m.movement_type, m.quantity, "
+            "       m.previous_quantity, m.new_quantity, m.reason, m.reference, m.created_by "
+            "FROM stock_movements m "
+            "JOIN products p ON p.id = m.product_id "
+            "WHERE (?1 = 0 OR m.product_id = ?1) "
+            "ORDER BY m.created_at DESC, m.id DESC LIMIT ?2;",
+            &statement,
+            &lastError_)) {
+        return rows;
+    }
+    statement.BindInt(1, productId);
+    statement.BindInt(2, limit <= 0 ? 80 : limit);
+    while (statement.Step() == SQLITE_ROW) {
+        StockMovementRecord record{};
+        record.id = statement.ColumnInt(0);
+        record.productId = statement.ColumnInt(1);
+        record.createdAt = statement.ColumnText(2);
+        record.sku = statement.ColumnText(3);
+        record.product = statement.ColumnText(4);
+        record.movementType = statement.ColumnText(5);
+        record.quantity = statement.ColumnInt(6);
+        record.previousQuantity = statement.ColumnInt(7);
+        record.newQuantity = statement.ColumnInt(8);
+        record.reason = statement.ColumnText(9);
+        record.reference = statement.ColumnText(10);
+        record.userName = statement.ColumnText(11);
+        rows.push_back(record);
+    }
+    return rows;
+}
+
+std::vector<InventoryAlertRecord> Repository::LoadInventoryAlerts(bool openOnly, int limit) {
+    std::vector<InventoryAlertRecord> rows;
+    if (!EnsureInitialized()) {
+        return rows;
+    }
+    SqliteStatement statement;
+    if (!db_.Prepare(
+            "SELECT a.id, a.product_id, COALESCE(p.sku, ''), COALESCE(p.name, ''), a.alert_type, a.message, "
+            "       a.severity, a.status, a.created_at, COALESCE(a.resolved_at, '') "
+            "FROM inventory_alerts a "
+            "LEFT JOIN products p ON p.id = a.product_id "
+            "WHERE (?1 = 0 OR a.status = 'Open') "
+            "ORDER BY CASE a.severity WHEN 'Critical' THEN 0 WHEN 'Warning' THEN 1 ELSE 2 END, a.created_at DESC "
+            "LIMIT ?2;",
+            &statement,
+            &lastError_)) {
+        return rows;
+    }
+    statement.BindInt(1, openOnly ? 1 : 0);
+    statement.BindInt(2, limit <= 0 ? 80 : limit);
+    while (statement.Step() == SQLITE_ROW) {
+        InventoryAlertRecord record{};
+        record.id = statement.ColumnInt(0);
+        record.productId = statement.ColumnInt(1);
+        record.sku = statement.ColumnText(2);
+        record.product = statement.ColumnText(3);
+        record.alertType = statement.ColumnText(4);
+        record.message = statement.ColumnText(5);
+        record.severity = statement.ColumnText(6);
+        record.status = statement.ColumnText(7);
+        record.createdAt = statement.ColumnText(8);
+        record.resolvedAt = statement.ColumnText(9);
+        rows.push_back(record);
+    }
     return rows;
 }
 
@@ -1038,7 +1405,7 @@ std::vector<ClientRecord> Repository::LoadClients(const ClientFilter& filter) {
         return rows;
     }
     if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::OpenClients)) {
-        SetLastError(L"Clients are not available for role: " + currentAccount_.role);
+        SetLastError(L"Customers are not available for role: " + currentAccount_.role);
         return rows;
     }
     const bool ownScope = hasCurrentAccount_
@@ -1109,12 +1476,21 @@ std::vector<ClientOrderRecord> Repository::LoadClientOrderHistory(int clientId) 
 
     SqliteStatement statement;
     if (!db_.Prepare(
-            "SELECT orders.order_code, products.name, orders.order_date, orders.total_price "
-            "FROM orders "
-            "JOIN products ON products.id = orders.product_id "
-            "WHERE orders.client_id = ?1 "
-            "ORDER BY orders.order_date DESC, orders.id DESC "
-            "LIMIT 12;",
+            "SELECT code, item_text, event_date, amount FROM ("
+            "    SELECT orders.order_code AS code, "
+            "           COALESCE((SELECT CASE WHEN COUNT(*) = 1 THEN MAX(product_name) ELSE CAST(COUNT(*) AS TEXT) || ' items' END FROM order_items WHERE order_items.order_id = orders.id), products.name) AS item_text, "
+            "           orders.order_date AS event_date, COALESCE(orders.total_amount, orders.total_price) AS amount, orders.id AS sort_id "
+            "    FROM orders "
+            "    LEFT JOIN products ON products.id = orders.product_id "
+            "    WHERE orders.client_id = ?1 "
+            "    UNION ALL "
+            "    SELECT sales.sale_code, "
+            "           COALESCE((SELECT CASE WHEN COUNT(*) = 1 THEN MAX(product_name) ELSE CAST(COUNT(*) AS TEXT) || ' items' END FROM sale_items WHERE sale_items.sale_id = sales.id), products.name), "
+            "           sales.sale_date, COALESCE(sales.total_amount, sales.revenue), sales.id "
+            "    FROM sales "
+            "    LEFT JOIN products ON products.id = sales.product_id "
+            "    WHERE sales.client_id = ?1 "
+            ") ORDER BY event_date DESC, sort_id DESC LIMIT 12;",
             &statement,
             &lastError_)) {
         return rows;
@@ -1180,8 +1556,11 @@ std::vector<AccountRecord> Repository::LoadAccounts() {
     if (!EnsureInitialized()) {
         return rows;
     }
-    if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::ManageUsers)) {
+    if (hasCurrentAccount_
+        && !access::HasPermission(currentAccount_, access::Permission::UsersView)
+        && !access::HasPermission(currentAccount_, access::Permission::RolesView)) {
         SetLastError(L"User accounts are not available for role: " + currentAccount_.role);
+        LogAudit(L"security", currentAccount_.id, L"Denied", L"Load accounts denied for role " + currentAccount_.role);
         return rows;
     }
 
@@ -1208,6 +1587,47 @@ std::vector<AccountRecord> Repository::LoadAccounts() {
         rows.push_back(record);
     }
 
+    return rows;
+}
+
+std::vector<RoleSummaryRecord> Repository::LoadRoleSummaries() {
+    std::vector<RoleSummaryRecord> rows;
+    if (!EnsureInitialized()) {
+        return rows;
+    }
+    if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::RolesView)) {
+        SetLastError(L"Roles are not available for role: " + currentAccount_.role);
+        LogAudit(L"security", currentAccount_.id, L"Denied", L"Load roles denied for role " + currentAccount_.role);
+        return rows;
+    }
+
+    SqliteStatement statement;
+    if (!db_.Prepare(
+            "SELECT roles.id, roles.name, roles.description, roles.default_start_page, "
+            "       COUNT(role_permissions.permission) "
+            "FROM roles "
+            "LEFT JOIN role_permissions ON role_permissions.role_id = roles.id "
+            "GROUP BY roles.id, roles.name, roles.description, roles.default_start_page "
+            "ORDER BY roles.id ASC;",
+            &statement,
+            &lastError_)) {
+        return rows;
+    }
+
+    while (statement.Step() == SQLITE_ROW) {
+        RoleSummaryRecord record{};
+        record.id = statement.ColumnInt(0);
+        record.name = statement.ColumnText(1);
+        record.description = statement.ColumnText(2);
+        record.defaultStartPage = statement.ColumnText(3);
+        if (record.defaultStartPage == L"Products") {
+            record.defaultStartPage = L"Inventory";
+        } else if (record.defaultStartPage == L"Clients") {
+            record.defaultStartPage = L"Customers";
+        }
+        record.permissionCount = statement.ColumnInt(4);
+        rows.push_back(record);
+    }
     return rows;
 }
 
@@ -1344,14 +1764,15 @@ std::vector<AuditRecord> Repository::LoadAuditLog(int limit) {
     if (!EnsureInitialized()) {
         return rows;
     }
-    if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::ViewAuditLog)) {
+    if (hasCurrentAccount_ && !access::HasPermission(currentAccount_, access::Permission::AuditView)) {
         SetLastError(L"Audit log is not available for role: " + currentAccount_.role);
+        LogAudit(L"security", currentAccount_.id, L"Denied", L"Load audit log denied for role " + currentAccount_.role);
         return rows;
     }
 
     SqliteStatement statement;
     if (!db_.Prepare(
-            "SELECT id, entity_type, entity_id, action, user_name, details, created_at "
+            "SELECT id, entity_type, entity_id, action, user_name, details, created_at, COALESCE(severity, 'Info') "
             "FROM audit_log "
             "ORDER BY id DESC "
             "LIMIT ?1;",
@@ -1370,6 +1791,7 @@ std::vector<AuditRecord> Repository::LoadAuditLog(int limit) {
         record.userName = statement.ColumnText(4);
         record.details = statement.ColumnText(5);
         record.createdAt = statement.ColumnText(6);
+        record.severity = statement.ColumnText(7);
         rows.push_back(record);
     }
     return rows;
@@ -1416,16 +1838,20 @@ bool Repository::SaveSettings(const AppSettings& settings) {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageSystemSettings, L"Save system settings")) {
+    if (!RequirePermission(access::Permission::SettingsEdit, L"Save system settings")) {
         return false;
     }
 
-    return UpdateSetting(L"theme", settings.theme)
+    const bool saved = UpdateSetting(L"theme", settings.theme)
         && UpdateSetting(L"language", settings.language)
         && UpdateSetting(L"date_format", settings.dateFormat)
         && UpdateSetting(L"app_name", settings.appName)
         && UpdateSetting(L"auto_refresh_minutes", settings.autoRefreshMinutes)
         && UpdateSetting(L"startup_page", settings.startupPage);
+    if (saved) {
+        LogAudit(L"settings", 0, L"Update", L"Application settings were changed");
+    }
+    return saved;
 }
 
 std::wstring Repository::ExportSalesCsv(const SalesFilter& filter) {
@@ -1477,6 +1903,42 @@ std::wstring Repository::ExportSalesCsv(const SalesFilter& filter) {
                << toCsv(row.dateDisplay) << ','
                << toCsv(row.status) << "\r\n";
     }
+    LogAudit(L"sales", 0, L"Export", L"Sales CSV exported: " + filePath);
+    return filePath;
+}
+
+std::wstring Repository::ExportOrdersCsv(const OrderFilter& filter) {
+    if (!EnsureInitialized()) {
+        return L"";
+    }
+    if (!RequirePermission(access::Permission::OrdersExport, L"Export orders CSV")) {
+        return L"";
+    }
+    const auto rows = LoadOrders(filter);
+    const std::wstring exportsDir = EnsureExportsDirectory();
+    if (exportsDir.empty()) {
+        return L"";
+    }
+    const std::wstring filePath = exportsDir + L"\\orders_export_" + TimestampForFile() + L".csv";
+    std::ofstream stream(std::filesystem::path(filePath), std::ios::binary);
+    if (!stream.is_open()) {
+        SetLastError(L"Unable to create CSV export file.");
+        return L"";
+    }
+    stream << "\xEF\xBB\xBF";
+    stream << "Order ID,Customer,Items,Quantity,Total,Payment,Status,Owner,Date\r\n";
+    for (const auto& row : rows) {
+        stream << CsvEscape(row.orderCode) << ','
+               << CsvEscape(row.client) << ','
+               << CsvEscape(row.product) << ','
+               << CsvEscape(std::to_wstring(row.quantity)) << ','
+               << CsvEscape(FormatMoney(row.totalPrice)) << ','
+               << CsvEscape(row.paymentStatus) << ','
+               << CsvEscape(row.status) << ','
+               << CsvEscape(row.owner) << ','
+               << CsvEscape(row.dateDisplay) << "\r\n";
+    }
+    LogAudit(L"orders", 0, L"Export", L"Orders CSV exported: " + filePath);
     return filePath;
 }
 
@@ -1883,7 +2345,7 @@ std::wstring Repository::ExportAuditLogReport() {
     if (!EnsureInitialized()) {
         return L"";
     }
-    if (!RequirePermission(access::Permission::ViewAuditLog, L"Export audit log report")) {
+    if (!RequirePermission(access::Permission::AuditExport, L"Export audit log report")) {
         return L"";
     }
     const auto rows = LoadAuditLog(200);
@@ -1999,12 +2461,335 @@ std::wstring Repository::ArchiveExportsSnapshot() {
     return archiveDir.wstring();
 }
 
+std::wstring Repository::BackupDatabaseSnapshot() {
+    if (!EnsureInitialized()) {
+        return L"";
+    }
+    if (!RequirePermission(access::Permission::SystemBackup, L"Create database backup")) {
+        return L"";
+    }
+
+    const std::wstring exportsDir = EnsureExportsDirectory();
+    if (exportsDir.empty()) {
+        SetLastError(L"Unable to create exports directory.");
+        return L"";
+    }
+
+    std::error_code ec;
+    const std::filesystem::path backupDir = std::filesystem::path(exportsDir) / L"database_backups";
+    std::filesystem::create_directories(backupDir, ec);
+    if (ec) {
+        SetLastError(L"Unable to create database backup directory.");
+        return L"";
+    }
+
+    const std::filesystem::path source = DatabasePath();
+    if (!std::filesystem::exists(source, ec)) {
+        SetLastError(L"Database file was not found.");
+        return L"";
+    }
+
+    const std::filesystem::path destination = backupDir / (L"salesflow_backup_" + TimestampForFile() + L".db");
+    std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) {
+        SetLastError(L"Unable to copy database backup file.");
+        return L"";
+    }
+
+    LogAudit(L"database", 0, L"Backup", L"Database backup created: " + destination.wstring());
+    return destination.wstring();
+}
+
+int Repository::ResolveClientId(const std::wstring& value) {
+    const std::wstring lookup = Trim(value);
+    if (lookup.empty()) {
+        return 0;
+    }
+    const int numeric = ParseInt(lookup, 0);
+    if (numeric > 0 && db_.QueryScalarInt(("SELECT COUNT(*) FROM clients WHERE id = " + std::to_string(numeric) + ";").c_str(), 0) > 0) {
+        return numeric;
+    }
+    return db_.QueryScalarInt(
+        ("SELECT id FROM clients WHERE lower(company_name) = lower(" + QuoteSql(lookup)
+            + ") OR lower(contact_name) = lower(" + QuoteSql(lookup) + ") LIMIT 1;").c_str(),
+        0);
+}
+
+int Repository::ResolveProductId(const std::wstring& value) {
+    const std::wstring lookup = Trim(value);
+    if (lookup.empty()) {
+        return 0;
+    }
+    const int numeric = ParseInt(lookup, 0);
+    if (numeric > 0 && db_.QueryScalarInt(("SELECT COUNT(*) FROM products WHERE id = " + std::to_string(numeric) + ";").c_str(), 0) > 0) {
+        return numeric;
+    }
+    return db_.QueryScalarInt(
+        ("SELECT id FROM products WHERE lower(sku) = lower(" + QuoteSql(lookup)
+            + ") OR lower(name) = lower(" + QuoteSql(lookup) + ") LIMIT 1;").c_str(),
+        0);
+}
+
+bool Repository::DeductStockForCommercialFlow(int productId, int quantity, const std::wstring& reference, const std::wstring& reason) {
+    if (quantity <= 0) {
+        SetLastError(L"Stock deduction requires a positive quantity.");
+        return false;
+    }
+
+    SqliteStatement product;
+    if (!db_.Prepare("SELECT name, stock, reorder_level, status, expiration_date FROM products WHERE id = ?1;", &product, &lastError_)) {
+        return false;
+    }
+    product.BindInt(1, productId);
+    if (product.Step() != SQLITE_ROW) {
+        SetLastError(L"Selected product was not found.");
+        return false;
+    }
+
+    const std::wstring productName = product.ColumnText(0);
+    const int previous = product.ColumnInt(1);
+    const int reorderLevel = product.ColumnInt(2);
+    const std::wstring manualStatus = product.ColumnText(3);
+    const std::wstring expiry = product.ColumnText(4);
+    if (previous < quantity) {
+        SetLastError(L"Insufficient stock for " + productName + L".");
+        LogAudit(L"inventory", productId, L"StockOutWarning", L"Insufficient stock for " + productName + L" while processing " + reference);
+        return false;
+    }
+
+    const int next = previous - quantity;
+    const std::wstring nextStatus = InventoryStatusFor(next, reorderLevel, manualStatus, expiry);
+    SqliteStatement update;
+    if (!db_.Prepare("UPDATE products SET stock = ?1, status = ?2, updated_at = ?3 WHERE id = ?4;", &update, &lastError_)) {
+        return false;
+    }
+    update.BindInt(1, next);
+    update.BindText(2, nextStatus);
+    update.BindText(3, CurrentTimestamp());
+    update.BindInt(4, productId);
+    if (update.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to deduct inventory stock.");
+        return false;
+    }
+
+    SqliteStatement movement;
+    if (!db_.Prepare(
+            "INSERT INTO stock_movements(id, product_id, movement_type, quantity, previous_quantity, new_quantity, reason, reference, created_by, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM stock_movements), ?1, 'Stock Out', ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+            &movement,
+            &lastError_)) {
+        return false;
+    }
+    movement.BindInt(1, productId);
+    movement.BindInt(2, quantity);
+    movement.BindInt(3, previous);
+    movement.BindInt(4, next);
+    movement.BindText(5, reason);
+    movement.BindText(6, reference);
+    movement.BindText(7, hasCurrentAccount_ ? currentAccount_.username : L"system");
+    movement.BindText(8, CurrentTimestamp());
+    if (movement.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to record stock movement.");
+        return false;
+    }
+
+    LogAudit(L"products", productId, L"StockOut", L"Stock Out: -" + std::to_wstring(quantity) + L" " + productName + L" for " + reference);
+    return true;
+}
+
+bool Repository::CreateDirectSale(const std::wstring& customer, const std::wstring& productValue, const std::wstring& quantityValue,
+    const std::wstring& discountPercent, const std::wstring& paymentMethod, const std::wstring& paymentAmount) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(access::Permission::CreateSale, L"Create sale")) {
+        return false;
+    }
+
+    const int clientId = ResolveClientId(customer);
+    const int productId = ResolveProductId(productValue);
+    const int quantity = ParseInt(quantityValue, -1);
+    const double manualDiscount = std::clamp(ParseDouble(discountPercent, 0.0), 0.0, 100.0);
+    const std::wstring method = Trim(paymentMethod).empty() ? L"Cash" : Trim(paymentMethod);
+    if (clientId <= 0 || productId <= 0 || quantity <= 0) {
+        SetLastError(L"Sale requires an existing customer, existing product, and positive quantity.");
+        return false;
+    }
+
+    if (hasCurrentAccount_ && access::ClientScope(access::RoleForAccount(currentAccount_)) == access::DataScope::Own) {
+        SqliteStatement ownership;
+        if (!db_.Prepare("SELECT account_manager FROM clients WHERE id = ?1;", &ownership, &lastError_)) {
+            return false;
+        }
+        ownership.BindInt(1, clientId);
+        if (ownership.Step() != SQLITE_ROW || ownership.ColumnText(0) != currentAccount_.fullName) {
+            SetLastError(L"You can create sales only for your own customers.");
+            return false;
+        }
+    }
+
+    SqliteStatement product;
+    if (!db_.Prepare("SELECT sku, name, price, cost, stock, COALESCE(discount_percent, 0), margin_percent FROM products WHERE id = ?1;", &product, &lastError_)) {
+        return false;
+    }
+    product.BindInt(1, productId);
+    if (product.Step() != SQLITE_ROW) {
+        SetLastError(L"Selected product was not found.");
+        return false;
+    }
+    const std::wstring sku = product.ColumnText(0);
+    const std::wstring productName = product.ColumnText(1);
+    const double listPrice = product.ColumnDouble(2);
+    const double cost = product.ColumnDouble(3);
+    const int stock = product.ColumnInt(4);
+    const double productDiscount = product.ColumnDouble(5);
+    if (stock < quantity) {
+        SetLastError(L"Insufficient stock for one or more items.");
+        LogAudit(L"inventory", productId, L"StockOutWarning", L"Insufficient stock for direct sale: " + productName);
+        return false;
+    }
+
+    const double totalDiscount = std::clamp(productDiscount + manualDiscount, 0.0, 100.0);
+    const double unitPrice = RoundMoney(listPrice * (1.0 - totalDiscount / 100.0));
+    const double subtotal = RoundMoney(listPrice * quantity);
+    const double total = RoundMoney(unitPrice * quantity);
+    const double discountAmount = RoundMoney(subtotal - total);
+    const double marginAmount = RoundMoney((unitPrice - cost) * quantity);
+    const double margin = total > 0.0 ? (marginAmount / total) * 100.0 : 0.0;
+    const double paid = paymentAmount.empty() ? total : std::max(0.0, ParseDouble(paymentAmount, total));
+
+    const int employeeId = EnsureEmployeeForCurrentAccount();
+    const int nextId = db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM sales;", 1);
+    std::wostringstream saleCode;
+    saleCode << L"SAL-" << (2100 + nextId);
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    SqliteStatement insertSale;
+    if (!db_.Prepare(
+            "INSERT INTO sales(id, sale_code, sale_number, order_id, employee_id, cashier_id, client_id, customer_id, product_id, channel, quantity, unit_price, subtotal, discount_amount, tax_amount, revenue, total_amount, margin_amount, margin_percent, sale_date, created_at, status, payment_method, cancellation_reason) "
+            "VALUES(?1, ?2, ?2, NULL, ?3, ?3, ?4, ?4, ?5, 'Direct', ?6, ?7, ?8, ?9, 0, ?10, ?10, ?11, ?12, ?13, ?13, 'Completed', ?14, '');",
+            &insertSale,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    insertSale.BindInt(1, nextId);
+    insertSale.BindText(2, saleCode.str());
+    insertSale.BindInt(3, employeeId);
+    insertSale.BindInt(4, clientId);
+    insertSale.BindInt(5, productId);
+    insertSale.BindInt(6, quantity);
+    insertSale.BindDouble(7, unitPrice);
+    insertSale.BindDouble(8, subtotal);
+    insertSale.BindDouble(9, discountAmount);
+    insertSale.BindDouble(10, total);
+    insertSale.BindDouble(11, marginAmount);
+    insertSale.BindDouble(12, margin);
+    insertSale.BindText(13, CurrentDateIso());
+    insertSale.BindText(14, method);
+    if (insertSale.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to create sale.");
+    }
+
+    SqliteStatement insertItem;
+    if (!db_.Prepare(
+            "INSERT INTO sale_items(id, sale_id, product_id, sku, product_name, quantity, unit_price, cost_price, line_total, margin_amount, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM sale_items), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);",
+            &insertItem,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    insertItem.BindInt(1, nextId);
+    insertItem.BindInt(2, productId);
+    insertItem.BindText(3, sku);
+    insertItem.BindText(4, productName);
+    insertItem.BindInt(5, quantity);
+    insertItem.BindDouble(6, unitPrice);
+    insertItem.BindDouble(7, cost);
+    insertItem.BindDouble(8, total);
+    insertItem.BindDouble(9, marginAmount);
+    insertItem.BindText(10, CurrentTimestamp());
+    if (insertItem.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to create sale item.");
+    }
+
+    SqliteStatement payment;
+    if (!db_.Prepare(
+            "INSERT INTO payments(id, order_id, sale_id, amount, payment_method, payment_status, reference, created_by, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM payments), NULL, ?1, ?2, ?3, ?4, ?5, ?6, ?7);",
+            &payment,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    payment.BindInt(1, nextId);
+    payment.BindDouble(2, paid);
+    payment.BindText(3, method);
+    payment.BindText(4, PaymentStatusFor(paid, total));
+    payment.BindText(5, saleCode.str());
+    payment.BindText(6, hasCurrentAccount_ ? currentAccount_.username : L"system");
+    payment.BindText(7, CurrentTimestamp());
+    if (payment.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to record payment.");
+    }
+
+    if (!DeductStockForCommercialFlow(productId, quantity, saleCode.str(), L"Sale")) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+
+    SqliteStatement updateClient;
+    if (db_.Prepare("UPDATE clients SET last_order_date = ?1, lifetime_value = lifetime_value + ?2 WHERE id = ?3;", &updateClient, nullptr)) {
+        updateClient.BindText(1, CurrentDateIso());
+        updateClient.BindDouble(2, total);
+        updateClient.BindInt(3, clientId);
+        updateClient.Step();
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    RefreshInventoryAlerts();
+    LogAudit(L"sales", nextId, L"Create", L"Sale " + saleCode.str() + L" created and inventory deducted");
+    return true;
+}
+
 bool Repository::AddDemoSale() {
     if (!EnsureInitialized()) {
         return false;
     }
     if (!RequirePermission(access::Permission::CreateSale, L"Create sale")) {
         return false;
+    }
+
+    {
+    if (db_.QueryScalarInt("SELECT COUNT(*) FROM clients;", 0) == 0) {
+        if (!AddDemoClient()) {
+            return false;
+        }
+    }
+    if (db_.QueryScalarInt("SELECT COUNT(*) FROM products WHERE status <> 'Discontinued';", 0) == 0) {
+        SetLastError(L"Add a product before creating a sale.");
+        return false;
+    }
+
+    const int clientId = db_.QueryScalarInt("SELECT id FROM clients ORDER BY id ASC LIMIT 1;", 0);
+    const int productId = db_.QueryScalarInt("SELECT id FROM products WHERE status <> 'Discontinued' ORDER BY stock DESC, id ASC LIMIT 1;", 0);
+    if (clientId <= 0 || productId <= 0) {
+        SetLastError(L"Sale requires at least one customer and one product.");
+        return false;
+    }
+    return CreateDirectSale(std::to_wstring(clientId), std::to_wstring(productId), L"1", L"0", L"Card", L"");
     }
 
     if (db_.QueryScalarInt("SELECT COUNT(*) FROM employees;", 0) == 0) {
@@ -2216,16 +3001,543 @@ bool Repository::DeleteSale(int saleId) {
         return false;
     }
 
-    SqliteStatement remove;
-    if (!db_.Prepare("DELETE FROM sales WHERE id = ?1;", &remove, &lastError_)) {
-        return false;
-    }
-    remove.BindInt(1, saleId);
-    if (remove.Step() != SQLITE_DONE) {
-        SetLastError(L"Unable to delete sale.");
+    std::ostringstream sql;
+    sql << "BEGIN IMMEDIATE;"
+        << "DELETE FROM payments WHERE sale_id = " << saleId << ";"
+        << "DELETE FROM sale_items WHERE sale_id = " << saleId << ";"
+        << "DELETE FROM sales WHERE id = " << saleId << ";"
+        << "COMMIT;";
+    if (!db_.Execute(sql.str(), &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
         return false;
     }
     LogAudit(L"sales", saleId, L"Delete", L"Sale deleted from Sales page");
+    return true;
+}
+
+bool Repository::CreateOrder(const std::wstring& customer, const std::wstring& productValue, const std::wstring& quantityValue,
+    const std::wstring& discountPercent, const std::wstring& paymentMethod, const std::wstring& paymentAmount,
+    const std::wstring& notes) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(access::Permission::CreateOrder, L"Create order")) {
+        return false;
+    }
+
+    const int clientId = ResolveClientId(customer);
+    const int productId = ResolveProductId(productValue);
+    const int quantity = ParseInt(quantityValue, -1);
+    const double manualDiscount = std::clamp(ParseDouble(discountPercent, 0.0), 0.0, 100.0);
+    const std::wstring method = Trim(paymentMethod).empty() ? L"Cash" : Trim(paymentMethod);
+    if (clientId <= 0 || productId <= 0 || quantity <= 0) {
+        SetLastError(L"Order requires an existing customer, existing product, and positive quantity.");
+        return false;
+    }
+
+    SqliteStatement product;
+    if (!db_.Prepare("SELECT sku, name, price, cost, stock, reorder_level, COALESCE(discount_percent, 0) FROM products WHERE id = ?1;", &product, &lastError_)) {
+        return false;
+    }
+    product.BindInt(1, productId);
+    if (product.Step() != SQLITE_ROW) {
+        SetLastError(L"Selected product was not found.");
+        return false;
+    }
+    const std::wstring sku = product.ColumnText(0);
+    const std::wstring productName = product.ColumnText(1);
+    const double listPrice = product.ColumnDouble(2);
+    const double cost = product.ColumnDouble(3);
+    const int stock = product.ColumnInt(4);
+    const int reorderLevel = product.ColumnInt(5);
+    const double productDiscount = product.ColumnDouble(6);
+    if (stock < quantity) {
+        SetLastError(L"Insufficient stock for one or more items.");
+        LogAudit(L"inventory", productId, L"StockOutWarning", L"Insufficient stock while creating order for " + productName);
+        return false;
+    }
+
+    const double totalDiscount = std::clamp(productDiscount + manualDiscount, 0.0, 100.0);
+    const double unitPrice = RoundMoney(listPrice * (1.0 - totalDiscount / 100.0));
+    const double subtotal = RoundMoney(listPrice * quantity);
+    const double total = RoundMoney(unitPrice * quantity);
+    const double discountAmount = RoundMoney(subtotal - total);
+    const double paid = std::max(0.0, ParseDouble(paymentAmount, 0.0));
+    const std::wstring paymentStatus = PaymentStatusFor(paid, total);
+    const int nextId = db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM orders;", 1);
+    const int employeeId = EnsureEmployeeForCurrentAccount();
+    std::wostringstream orderCode;
+    orderCode << L"ORD-" << (1000 + nextId);
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    SqliteStatement insert;
+    if (!db_.Prepare(
+            "INSERT INTO orders(id, order_code, order_number, client_id, customer_id, product_id, created_by, assigned_to, quantity, subtotal, discount_amount, tax_amount, total_amount, total_price, order_date, status, payment_status, payment_method, priority, notes, created_at, updated_at, completed_at) "
+            "VALUES(?1, ?2, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?10, ?11, 'Draft', ?12, ?13, ?14, ?15, ?16, ?16, NULL);",
+            &insert,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    insert.BindInt(1, nextId);
+    insert.BindText(2, orderCode.str());
+    insert.BindInt(3, clientId);
+    insert.BindInt(4, productId);
+    insert.BindInt(5, hasCurrentAccount_ ? currentAccount_.id : 0);
+    insert.BindInt(6, employeeId);
+    insert.BindInt(7, quantity);
+    insert.BindDouble(8, subtotal);
+    insert.BindDouble(9, discountAmount);
+    insert.BindDouble(10, total);
+    insert.BindText(11, CurrentDateIso());
+    insert.BindText(12, paymentStatus);
+    insert.BindText(13, method);
+    insert.BindText(14, stock <= reorderLevel ? L"High" : L"Medium");
+    insert.BindText(15, Trim(notes));
+    insert.BindText(16, CurrentTimestamp());
+    if (insert.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to create order.");
+    }
+
+    SqliteStatement item;
+    if (!db_.Prepare(
+            "INSERT INTO order_items(id, order_id, product_id, sku, product_name, quantity, unit_price, cost_price, discount_percent, line_total, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM order_items), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);",
+            &item,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    item.BindInt(1, nextId);
+    item.BindInt(2, productId);
+    item.BindText(3, sku);
+    item.BindText(4, productName);
+    item.BindInt(5, quantity);
+    item.BindDouble(6, unitPrice);
+    item.BindDouble(7, cost);
+    item.BindDouble(8, totalDiscount);
+    item.BindDouble(9, total);
+    item.BindText(10, CurrentTimestamp());
+    if (item.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to create order item.");
+    }
+
+    if (paid > 0.0) {
+        SqliteStatement payment;
+        if (!db_.Prepare(
+                "INSERT INTO payments(id, order_id, sale_id, amount, payment_method, payment_status, reference, created_by, created_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM payments), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7);",
+                &payment,
+                &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        payment.BindInt(1, nextId);
+        payment.BindDouble(2, paid);
+        payment.BindText(3, method);
+        payment.BindText(4, paymentStatus);
+        payment.BindText(5, orderCode.str());
+        payment.BindText(6, hasCurrentAccount_ ? currentAccount_.username : L"system");
+        payment.BindText(7, CurrentTimestamp());
+        if (payment.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to record order payment.");
+        }
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    LogAudit(L"orders", nextId, L"Create", L"Order " + orderCode.str() + L" created");
+    return true;
+}
+
+bool Repository::UpdateOrder(int orderId, const std::wstring& customer, const std::wstring& productValue, const std::wstring& quantityValue,
+    const std::wstring& discountPercent, const std::wstring& paymentMethod, const std::wstring& paymentAmount,
+    const std::wstring& notes) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(access::Permission::OrdersEdit, L"Edit order")) {
+        return false;
+    }
+
+    SqliteStatement existing;
+    if (!db_.Prepare(
+            "SELECT status, order_code, (SELECT COUNT(*) FROM sales WHERE sales.order_id = orders.id) "
+            "FROM orders WHERE id = ?1;",
+            &existing,
+            &lastError_)) {
+        return false;
+    }
+    existing.BindInt(1, orderId);
+    if (existing.Step() != SQLITE_ROW) {
+        SetLastError(L"Select an order before editing it.");
+        return false;
+    }
+    const std::wstring currentStatus = NormalizeOrderStatus(existing.ColumnText(0));
+    const std::wstring orderCode = existing.ColumnText(1);
+    const int saleCount = existing.ColumnInt(2);
+    if (IsFinalOrderStatus(currentStatus) || saleCount > 0) {
+        SetLastError(L"Finalized orders cannot be edited.");
+        return false;
+    }
+
+    const int clientId = ResolveClientId(customer);
+    const int productId = ResolveProductId(productValue);
+    const int quantity = ParseInt(quantityValue, -1);
+    const double manualDiscount = std::clamp(ParseDouble(discountPercent, 0.0), 0.0, 100.0);
+    const std::wstring method = Trim(paymentMethod).empty() ? L"Cash" : Trim(paymentMethod);
+    if (clientId <= 0 || productId <= 0 || quantity <= 0) {
+        SetLastError(L"Order requires an existing customer, existing product, and positive quantity.");
+        return false;
+    }
+
+    SqliteStatement product;
+    if (!db_.Prepare("SELECT sku, name, price, cost, stock, reorder_level, COALESCE(discount_percent, 0) FROM products WHERE id = ?1;", &product, &lastError_)) {
+        return false;
+    }
+    product.BindInt(1, productId);
+    if (product.Step() != SQLITE_ROW) {
+        SetLastError(L"Selected product was not found.");
+        return false;
+    }
+    const std::wstring sku = product.ColumnText(0);
+    const std::wstring productName = product.ColumnText(1);
+    const double listPrice = product.ColumnDouble(2);
+    const double cost = product.ColumnDouble(3);
+    const int stock = product.ColumnInt(4);
+    const int reorderLevel = product.ColumnInt(5);
+    const double productDiscount = product.ColumnDouble(6);
+    if (stock < quantity) {
+        SetLastError(L"Insufficient stock for one or more items.");
+        LogAudit(L"inventory", productId, L"StockOutWarning", L"Insufficient stock while editing order " + orderCode);
+        return false;
+    }
+
+    const double totalDiscount = std::clamp(productDiscount + manualDiscount, 0.0, 100.0);
+    const double unitPrice = RoundMoney(listPrice * (1.0 - totalDiscount / 100.0));
+    const double subtotal = RoundMoney(listPrice * quantity);
+    const double total = RoundMoney(unitPrice * quantity);
+    const double discountAmount = RoundMoney(subtotal - total);
+    const double paid = std::max(0.0, ParseDouble(paymentAmount, 0.0));
+    const std::wstring paymentStatus = PaymentStatusFor(paid, total);
+    const int employeeId = EnsureEmployeeForCurrentAccount();
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    SqliteStatement update;
+    if (!db_.Prepare(
+            "UPDATE orders SET client_id = ?1, customer_id = ?1, product_id = ?2, assigned_to = ?3, quantity = ?4, subtotal = ?5, "
+            "discount_amount = ?6, tax_amount = 0, total_amount = ?7, total_price = ?7, payment_status = ?8, "
+            "payment_method = ?9, priority = ?10, notes = ?11, updated_at = ?12 WHERE id = ?13;",
+            &update,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    update.BindInt(1, clientId);
+    update.BindInt(2, productId);
+    update.BindInt(3, employeeId);
+    update.BindInt(4, quantity);
+    update.BindDouble(5, subtotal);
+    update.BindDouble(6, discountAmount);
+    update.BindDouble(7, total);
+    update.BindText(8, paymentStatus);
+    update.BindText(9, method);
+    update.BindText(10, stock <= reorderLevel ? L"High" : L"Medium");
+    update.BindText(11, Trim(notes));
+    update.BindText(12, CurrentTimestamp());
+    update.BindInt(13, orderId);
+    if (update.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to update order.");
+    }
+
+    std::ostringstream clearItems;
+    clearItems << "DELETE FROM order_items WHERE order_id = " << orderId << ";";
+    if (!db_.Execute(clearItems.str(), &lastError_)) {
+        return rollback(L"Unable to replace order items.");
+    }
+
+    SqliteStatement item;
+    if (!db_.Prepare(
+            "INSERT INTO order_items(id, order_id, product_id, sku, product_name, quantity, unit_price, cost_price, discount_percent, line_total, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM order_items), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);",
+            &item,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    item.BindInt(1, orderId);
+    item.BindInt(2, productId);
+    item.BindText(3, sku);
+    item.BindText(4, productName);
+    item.BindInt(5, quantity);
+    item.BindDouble(6, unitPrice);
+    item.BindDouble(7, cost);
+    item.BindDouble(8, totalDiscount);
+    item.BindDouble(9, total);
+    item.BindText(10, CurrentTimestamp());
+    if (item.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to create order item.");
+    }
+
+    std::ostringstream clearPayments;
+    clearPayments << "DELETE FROM payments WHERE order_id = " << orderId << " AND sale_id IS NULL;";
+    if (!db_.Execute(clearPayments.str(), &lastError_)) {
+        return rollback(L"Unable to replace order payment.");
+    }
+    if (paid > 0.0) {
+        SqliteStatement payment;
+        if (!db_.Prepare(
+                "INSERT INTO payments(id, order_id, sale_id, amount, payment_method, payment_status, reference, created_by, created_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM payments), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7);",
+                &payment,
+                &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        payment.BindInt(1, orderId);
+        payment.BindDouble(2, paid);
+        payment.BindText(3, method);
+        payment.BindText(4, paymentStatus);
+        payment.BindText(5, orderCode);
+        payment.BindText(6, hasCurrentAccount_ ? currentAccount_.username : L"system");
+        payment.BindText(7, CurrentTimestamp());
+        if (payment.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to record order payment.");
+        }
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    LogAudit(L"orders", orderId, L"Update", L"Order " + orderCode + L" updated");
+    return true;
+}
+
+bool Repository::CompleteOrderIntoSale(int orderId) {
+    if (db_.QueryScalarInt(("SELECT COUNT(*) FROM sales WHERE order_id = " + std::to_string(orderId) + ";").c_str(), 0) > 0) {
+        SqliteStatement mark;
+        if (!db_.Prepare("UPDATE orders SET status = 'Completed', completed_at = COALESCE(completed_at, ?1), updated_at = ?1 WHERE id = ?2;", &mark, &lastError_)) {
+            return false;
+        }
+        mark.BindText(1, CurrentTimestamp());
+        mark.BindInt(2, orderId);
+        if (mark.Step() != SQLITE_DONE) {
+            SetLastError(L"Unable to mark order as completed.");
+            return false;
+        }
+        return true;
+    }
+
+    SqliteStatement order;
+    if (!db_.Prepare(
+            "SELECT orders.order_code, orders.client_id, COALESCE(orders.assigned_to, 0), orders.payment_method, orders.payment_status, "
+            "       COALESCE(orders.subtotal, orders.total_price), COALESCE(orders.discount_amount, 0), COALESCE(orders.tax_amount, 0), COALESCE(orders.total_amount, orders.total_price) "
+            "FROM orders WHERE orders.id = ?1;",
+            &order,
+            &lastError_)) {
+        return false;
+    }
+    order.BindInt(1, orderId);
+    if (order.Step() != SQLITE_ROW) {
+        SetLastError(L"Order was not found.");
+        return false;
+    }
+    const std::wstring orderCode = order.ColumnText(0);
+    const int clientId = order.ColumnInt(1);
+    int employeeId = order.ColumnInt(2);
+    if (employeeId <= 0) {
+        employeeId = EnsureEmployeeForCurrentAccount();
+    }
+    const std::wstring paymentMethod = order.ColumnText(3);
+    const double subtotal = order.ColumnDouble(5);
+    const double discount = order.ColumnDouble(6);
+    const double tax = order.ColumnDouble(7);
+    const double total = order.ColumnDouble(8);
+
+    struct Item {
+        int productId{};
+        std::wstring sku;
+        std::wstring name;
+        int quantity{};
+        double unitPrice{};
+        double cost{};
+        double lineTotal{};
+    };
+    std::vector<Item> items;
+    SqliteStatement itemRows;
+    if (!db_.Prepare(
+            "SELECT product_id, sku, product_name, quantity, unit_price, cost_price, line_total "
+            "FROM order_items WHERE order_id = ?1 ORDER BY id;",
+            &itemRows,
+            &lastError_)) {
+        return false;
+    }
+    itemRows.BindInt(1, orderId);
+    while (itemRows.Step() == SQLITE_ROW) {
+        items.push_back({
+            itemRows.ColumnInt(0),
+            itemRows.ColumnText(1),
+            itemRows.ColumnText(2),
+            itemRows.ColumnInt(3),
+            itemRows.ColumnDouble(4),
+            itemRows.ColumnDouble(5),
+            itemRows.ColumnDouble(6)
+        });
+    }
+    if (items.empty()) {
+        SetLastError(L"Order has no items to complete.");
+        return false;
+    }
+
+    for (const auto& item : items) {
+        SqliteStatement stock;
+        if (!db_.Prepare("SELECT stock FROM products WHERE id = ?1;", &stock, &lastError_)) {
+            return false;
+        }
+        stock.BindInt(1, item.productId);
+        if (stock.Step() != SQLITE_ROW || stock.ColumnInt(0) < item.quantity) {
+            SetLastError(L"Insufficient stock for one or more items.");
+            LogAudit(L"inventory", item.productId, L"StockOutWarning", L"Insufficient stock while completing " + orderCode);
+            return false;
+        }
+    }
+
+    const int saleId = db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM sales;", 1);
+    std::wostringstream saleCode;
+    saleCode << L"SAL-" << (2100 + saleId);
+    double marginAmount = 0.0;
+    for (const auto& item : items) {
+        marginAmount += (item.unitPrice - item.cost) * item.quantity;
+    }
+    marginAmount = RoundMoney(marginAmount);
+    const double marginPercent = total > 0.0 ? (marginAmount / total) * 100.0 : 0.0;
+
+    SqliteStatement insertSale;
+    if (!db_.Prepare(
+            "INSERT INTO sales(id, sale_code, sale_number, order_id, employee_id, cashier_id, client_id, customer_id, product_id, channel, quantity, unit_price, subtotal, discount_amount, tax_amount, revenue, total_amount, margin_amount, margin_percent, sale_date, created_at, status, payment_method, cancellation_reason) "
+            "VALUES(?1, ?2, ?2, ?3, ?4, ?4, ?5, ?5, ?6, 'Order', ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13, ?14, ?15, ?15, 'Completed', ?16, '');",
+            &insertSale,
+            &lastError_)) {
+        return false;
+    }
+    insertSale.BindInt(1, saleId);
+    insertSale.BindText(2, saleCode.str());
+    insertSale.BindInt(3, orderId);
+    insertSale.BindInt(4, employeeId);
+    insertSale.BindInt(5, clientId);
+    insertSale.BindInt(6, items.front().productId);
+    insertSale.BindInt(7, items.front().quantity);
+    insertSale.BindDouble(8, items.front().unitPrice);
+    insertSale.BindDouble(9, subtotal);
+    insertSale.BindDouble(10, discount);
+    insertSale.BindDouble(11, tax);
+    insertSale.BindDouble(12, total);
+    insertSale.BindDouble(13, marginAmount);
+    insertSale.BindDouble(14, marginPercent);
+    insertSale.BindText(15, CurrentDateIso());
+    insertSale.BindText(16, paymentMethod.empty() ? L"Cash" : paymentMethod);
+    if (insertSale.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to convert order into sale.");
+        return false;
+    }
+
+    for (const auto& item : items) {
+        SqliteStatement saleItem;
+        if (!db_.Prepare(
+                "INSERT INTO sale_items(id, sale_id, product_id, sku, product_name, quantity, unit_price, cost_price, line_total, margin_amount, created_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM sale_items), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);",
+                &saleItem,
+                &lastError_)) {
+            return false;
+        }
+        saleItem.BindInt(1, saleId);
+        saleItem.BindInt(2, item.productId);
+        saleItem.BindText(3, item.sku);
+        saleItem.BindText(4, item.name);
+        saleItem.BindInt(5, item.quantity);
+        saleItem.BindDouble(6, item.unitPrice);
+        saleItem.BindDouble(7, item.cost);
+        saleItem.BindDouble(8, item.lineTotal);
+        saleItem.BindDouble(9, RoundMoney((item.unitPrice - item.cost) * item.quantity));
+        saleItem.BindText(10, CurrentTimestamp());
+        if (saleItem.Step() != SQLITE_DONE) {
+            SetLastError(L"Unable to create sale item.");
+            return false;
+        }
+        if (!DeductStockForCommercialFlow(item.productId, item.quantity, saleCode.str(), L"Sale")) {
+            return false;
+        }
+    }
+
+    double paid = 0.0;
+    SqliteStatement paidStatement;
+    if (db_.Prepare("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE order_id = ?1;", &paidStatement, &lastError_)) {
+        paidStatement.BindInt(1, orderId);
+        if (paidStatement.Step() == SQLITE_ROW) {
+            paid = paidStatement.ColumnDouble(0);
+        }
+    }
+    SqliteStatement payment;
+    if (!db_.Prepare(
+            "INSERT INTO payments(id, order_id, sale_id, amount, payment_method, payment_status, reference, created_by, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM payments), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+            &payment,
+            &lastError_)) {
+        return false;
+    }
+    payment.BindInt(1, orderId);
+    payment.BindInt(2, saleId);
+    payment.BindDouble(3, paid > 0.0 ? paid : total);
+    payment.BindText(4, paymentMethod.empty() ? L"Cash" : paymentMethod);
+    payment.BindText(5, PaymentStatusFor(paid > 0.0 ? paid : total, total));
+    payment.BindText(6, saleCode.str());
+    payment.BindText(7, hasCurrentAccount_ ? currentAccount_.username : L"system");
+    payment.BindText(8, CurrentTimestamp());
+    if (payment.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to record sale payment.");
+        return false;
+    }
+
+    SqliteStatement complete;
+    if (!db_.Prepare("UPDATE orders SET status = 'Completed', completed_at = ?1, updated_at = ?1 WHERE id = ?2;", &complete, &lastError_)) {
+        return false;
+    }
+    complete.BindText(1, CurrentTimestamp());
+    complete.BindInt(2, orderId);
+    if (complete.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to finalize completed order.");
+        return false;
+    }
+
+    SqliteStatement updateClient;
+    if (db_.Prepare("UPDATE clients SET last_order_date = ?1, lifetime_value = lifetime_value + ?2 WHERE id = ?3;", &updateClient, nullptr)) {
+        updateClient.BindText(1, CurrentDateIso());
+        updateClient.BindDouble(2, total);
+        updateClient.BindInt(3, clientId);
+        updateClient.Step();
+    }
+
+    LogAudit(L"orders", orderId, L"Complete", L"Order " + orderCode + L" completed and converted to sale " + saleCode.str());
+    LogAudit(L"sales", saleId, L"Create", L"Sale " + saleCode.str() + L" created from order " + orderCode);
     return true;
 }
 
@@ -2235,6 +3547,26 @@ bool Repository::AddDemoOrder() {
     }
     if (!RequirePermission(access::Permission::CreateOrder, L"Create order")) {
         return false;
+    }
+
+    {
+    if (db_.QueryScalarInt("SELECT COUNT(*) FROM clients;", 0) == 0) {
+        if (!AddDemoClient()) {
+            return false;
+        }
+    }
+    if (db_.QueryScalarInt("SELECT COUNT(*) FROM products WHERE status <> 'Discontinued';", 0) == 0) {
+        SetLastError(L"Add a product before creating an order.");
+        return false;
+    }
+
+    const int clientId = db_.QueryScalarInt("SELECT id FROM clients ORDER BY id ASC LIMIT 1;", 0);
+    const int productId = db_.QueryScalarInt("SELECT id FROM products WHERE status <> 'Discontinued' ORDER BY stock DESC, id ASC LIMIT 1;", 0);
+    if (clientId <= 0 || productId <= 0) {
+        SetLastError(L"Order requires at least one customer and one product.");
+        return false;
+    }
+    return CreateOrder(std::to_wstring(clientId), std::to_wstring(productId), L"1", L"0", L"Cash", L"0", L"Created from Orders page command");
     }
 
     if (db_.QueryScalarInt("SELECT COUNT(*) FROM clients;", 0) == 0) {
@@ -2330,22 +3662,89 @@ bool Repository::AdvanceOrderStatus(int orderId) {
         return false;
     }
 
-    const std::wstring current = statement.ColumnText(0);
-    std::wstring next = current;
-    if (current == L"Processing") {
-        next = L"Confirmed";
-    } else if (current == L"Confirmed") {
-        next = L"Packed";
-    } else if (current == L"Packed") {
-        next = L"Delivered";
-    }
-
-    std::ostringstream sql;
-    sql << "UPDATE orders SET status = " << QuoteSql(next) << " WHERE id = " << orderId << ";";
-    if (!db_.Execute(sql.str(), &lastError_)) {
+    const std::wstring current = NormalizeOrderStatus(statement.ColumnText(0));
+    if (IsFinalOrderStatus(current)) {
+        SetLastError(L"Completed, cancelled, or refunded orders cannot be advanced.");
         return false;
     }
-    LogAudit(L"orders", orderId, L"UpdateStatus", L"Order status changed to " + next);
+    const std::wstring next = NextOrderStatus(current);
+    if (next == current) {
+        SetLastError(L"Order status cannot be advanced further.");
+        return false;
+    }
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    if (next == L"Completed") {
+        if (!CompleteOrderIntoSale(orderId)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+    } else {
+        SqliteStatement update;
+        if (!db_.Prepare("UPDATE orders SET status = ?1, updated_at = ?2 WHERE id = ?3;", &update, &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        update.BindText(1, next);
+        update.BindText(2, CurrentTimestamp());
+        update.BindInt(3, orderId);
+        if (update.Step() != SQLITE_DONE) {
+            db_.Execute("ROLLBACK;", nullptr);
+            SetLastError(L"Unable to update order status.");
+            return false;
+        }
+        LogAudit(L"orders", orderId, L"UpdateStatus", L"Order advanced from " + current + L" to " + next);
+    }
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    RefreshInventoryAlerts();
+    return true;
+}
+
+bool Repository::CancelOrder(int orderId) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(access::Permission::ChangeOrderStatus, L"Cancel order")) {
+        return false;
+    }
+
+    SqliteStatement statement;
+    if (!db_.Prepare("SELECT status, order_code FROM orders WHERE id = ?1;", &statement, &lastError_)) {
+        return false;
+    }
+    statement.BindInt(1, orderId);
+    if (statement.Step() != SQLITE_ROW) {
+        SetLastError(L"Select an order before cancelling it.");
+        return false;
+    }
+
+    const std::wstring current = NormalizeOrderStatus(statement.ColumnText(0));
+    const std::wstring orderCode = statement.ColumnText(1);
+    if (current == L"Completed" || current == L"Refunded") {
+        SetLastError(L"Completed or refunded orders cannot be cancelled.");
+        return false;
+    }
+    if (current == L"Cancelled") {
+        SetLastError(L"Order is already cancelled.");
+        return false;
+    }
+
+    SqliteStatement update;
+    if (!db_.Prepare("UPDATE orders SET status = 'Cancelled', updated_at = ?1 WHERE id = ?2;", &update, &lastError_)) {
+        return false;
+    }
+    update.BindText(1, CurrentTimestamp());
+    update.BindInt(2, orderId);
+    if (update.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to cancel order.");
+        return false;
+    }
+    LogAudit(L"orders", orderId, L"Cancel", L"Order " + orderCode + L" cancelled");
     return true;
 }
 
@@ -2357,9 +3756,34 @@ bool Repository::DeleteOrder(int orderId) {
         return false;
     }
 
+    SqliteStatement statusStatement;
+    if (!db_.Prepare(
+            "SELECT status, (SELECT COUNT(*) FROM sales WHERE sales.order_id = orders.id) "
+            "FROM orders WHERE id = ?1;",
+            &statusStatement,
+            &lastError_)) {
+        return false;
+    }
+    statusStatement.BindInt(1, orderId);
+    if (statusStatement.Step() != SQLITE_ROW) {
+        SetLastError(L"Select an order before deleting it.");
+        return false;
+    }
+    const std::wstring currentStatus = NormalizeOrderStatus(statusStatement.ColumnText(0));
+    const int saleCount = statusStatement.ColumnInt(1);
+    if (currentStatus == L"Completed" || saleCount > 0) {
+        SetLastError(L"Completed orders converted to sales cannot be deleted from Orders.");
+        return false;
+    }
+
     std::ostringstream sql;
-    sql << "DELETE FROM orders WHERE id = " << orderId << ";";
+    sql << "BEGIN IMMEDIATE;"
+        << "DELETE FROM payments WHERE order_id = " << orderId << " AND sale_id IS NULL;"
+        << "DELETE FROM order_items WHERE order_id = " << orderId << ";"
+        << "DELETE FROM orders WHERE id = " << orderId << ";"
+        << "COMMIT;";
     if (!db_.Execute(sql.str(), &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
         return false;
     }
     LogAudit(L"orders", orderId, L"Delete", L"Order deleted from Orders page");
@@ -2423,6 +3847,8 @@ bool Repository::AddDemoProduct() {
         SetLastError(L"Unable to create demo product.");
         return false;
     }
+    EnsureInventoryCatalogData();
+    RefreshInventoryAlerts();
     LogAudit(L"products", nextId, L"Create", L"Product created from Products page command");
     return true;
 }
@@ -2491,7 +3917,147 @@ bool Repository::UpdateDemoProduct(int productId) {
         SetLastError(L"Unable to update product.");
         return false;
     }
+    RefreshInventoryAlerts();
     LogAudit(L"products", productId, L"Update", L"Product stock, price, margin and discount were updated");
+    return true;
+}
+
+bool Repository::SaveProduct(const ProductRecord& product, bool createNew) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(createNew ? access::Permission::CreateProduct : access::Permission::EditProduct,
+            createNew ? L"Create product" : L"Edit product")) {
+        return false;
+    }
+
+    const std::wstring sku = Trim(product.sku);
+    const std::wstring name = Trim(product.name);
+    const std::wstring category = Trim(product.category);
+    const std::wstring supplier = Trim(product.supplier);
+    const std::wstring status = Trim(product.status).empty() ? L"In Stock" : Trim(product.status);
+    const std::wstring expiry = Trim(product.expirationDateIso).empty() ? L"2026-12-31" : Trim(product.expirationDateIso);
+    const std::wstring batch = Trim(product.batchCode).empty() ? L"MANUAL" : Trim(product.batchCode);
+    if (sku.empty() || name.empty() || category.empty() || product.stock < 0 || product.reorderLevel < 0
+        || product.price < 0.0 || product.cost < 0.0 || product.discountPercent < 0.0 || product.discountPercent > 100.0) {
+        SetLastError(L"Product requires SKU, name, category, non-negative numbers, and discount between 0 and 100.");
+        return false;
+    }
+    const int duplicateCount = db_.QueryScalarInt(
+        ("SELECT COUNT(*) FROM products WHERE lower(sku) = lower(" + QuoteSql(sku) + ") AND id <> " + std::to_string(product.id) + ";").c_str(),
+        0);
+    if (duplicateCount > 0) {
+        SetLastError(L"Product SKU already exists.");
+        return false;
+    }
+    const bool categoryWasNew = db_.QueryScalarInt(("SELECT COUNT(*) FROM categories WHERE lower(name) = lower(" + QuoteSql(category) + ");").c_str(), 0) == 0;
+    const std::wstring safeSupplier = supplier.empty() ? L"Unassigned Supplier" : supplier;
+    const bool supplierWasNew = db_.QueryScalarInt(("SELECT COUNT(*) FROM suppliers WHERE lower(name) = lower(" + QuoteSql(safeSupplier) + ");").c_str(), 0) == 0;
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    SqliteStatement categoryUpsert;
+    if (!db_.Prepare(
+            "INSERT OR IGNORE INTO categories(id, name, description, status, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM categories), ?1, '', 'Active', ?2);",
+            &categoryUpsert,
+            &lastError_)) {
+        return rollback(L"Unable to prepare product category.");
+    }
+    categoryUpsert.BindText(1, category);
+    categoryUpsert.BindText(2, CurrentTimestamp());
+    if (categoryUpsert.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to save product category.");
+    }
+
+    SqliteStatement supplierUpsert;
+    if (!db_.Prepare(
+            "INSERT OR IGNORE INTO suppliers(id, name, contact_name, phone, email, address, status, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM suppliers), ?1, '', '', '', '', 'Active', ?2);",
+            &supplierUpsert,
+            &lastError_)) {
+        return rollback(L"Unable to prepare product supplier.");
+    }
+    supplierUpsert.BindText(1, safeSupplier);
+    supplierUpsert.BindText(2, CurrentTimestamp());
+    if (supplierUpsert.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to save product supplier.");
+    }
+
+    const int categoryId = db_.QueryScalarInt(("SELECT id FROM categories WHERE lower(name) = lower(" + QuoteSql(category) + ") LIMIT 1;").c_str(), 0);
+    const int supplierId = db_.QueryScalarInt(("SELECT id FROM suppliers WHERE lower(name) = lower(" + QuoteSql(safeSupplier) + ") LIMIT 1;").c_str(), 0);
+    const double margin = MarginPercent(product.price, product.cost);
+    const std::wstring storedStatus = (status == L"Discontinued" || status == L"Archived")
+        ? status
+        : InventoryStatusFor(product.stock, product.reorderLevel, status, expiry);
+    const int productId = createNew ? db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM products;", 1) : product.id;
+
+    SqliteStatement save;
+    if (createNew) {
+        if (!db_.Prepare(
+                "INSERT INTO products(id, sku, name, category, category_id, stock, reorder_level, price, cost, discount_percent, status, supplier, supplier_id, margin_percent, expiration_date, batch_code, description, created_at, updated_at) "
+                "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?18);",
+                &save,
+                &lastError_)) {
+            return rollback(L"Unable to prepare product insert.");
+        }
+        save.BindInt(1, productId);
+    } else {
+        if (productId <= 0) {
+            return rollback(L"Select a product before editing it.");
+        }
+        if (!db_.Prepare(
+                "UPDATE products SET sku = ?2, name = ?3, category = ?4, category_id = ?5, stock = ?6, reorder_level = ?7, "
+                "price = ?8, cost = ?9, discount_percent = ?10, status = ?11, supplier = ?12, supplier_id = ?13, "
+                "margin_percent = ?14, expiration_date = ?15, batch_code = ?16, description = ?17, updated_at = ?18 "
+                "WHERE id = ?1;",
+                &save,
+                &lastError_)) {
+            return rollback(L"Unable to prepare product update.");
+        }
+        save.BindInt(1, productId);
+    }
+    save.BindText(2, sku);
+    save.BindText(3, name);
+    save.BindText(4, category);
+    save.BindInt(5, categoryId);
+    save.BindInt(6, product.stock);
+    save.BindInt(7, product.reorderLevel);
+    save.BindDouble(8, product.price);
+    save.BindDouble(9, product.cost);
+    save.BindDouble(10, product.discountPercent);
+    save.BindText(11, storedStatus);
+    save.BindText(12, safeSupplier);
+    save.BindInt(13, supplierId);
+    save.BindDouble(14, margin);
+    save.BindText(15, expiry);
+    save.BindText(16, batch);
+    save.BindText(17, product.description);
+    save.BindText(18, CurrentTimestamp());
+    if (save.Step() != SQLITE_DONE) {
+        return rollback(createNew ? L"Unable to create product." : L"Unable to update product.");
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    RefreshInventoryAlerts();
+    LogAudit(L"products", productId, createNew ? L"Create" : L"Update",
+        (createNew ? L"Product " : L"Product updated: ") + name);
+    if (categoryWasNew) {
+        LogAudit(L"categories", categoryId, L"Create", L"Category created from Inventory product form: " + category);
+    }
+    if (supplierWasNew) {
+        LogAudit(L"suppliers", supplierId, L"Create", L"Supplier created from Inventory product form: " + safeSupplier);
+    }
     return true;
 }
 
@@ -2538,6 +4104,30 @@ bool Repository::RemoveProduct(int productId) {
     }
 
     {
+        SqliteStatement deleteAlerts;
+        if (!db_.Prepare("DELETE FROM inventory_alerts WHERE product_id = ?1;", &deleteAlerts, &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        deleteAlerts.BindInt(1, productId);
+        if (deleteAlerts.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to delete inventory alerts linked to the selected product.");
+        }
+    }
+
+    {
+        SqliteStatement deleteMovements;
+        if (!db_.Prepare("DELETE FROM stock_movements WHERE product_id = ?1;", &deleteMovements, &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        deleteMovements.BindInt(1, productId);
+        if (deleteMovements.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to delete stock movements linked to the selected product.");
+        }
+    }
+
+    {
         SqliteStatement deleteProduct;
         if (!db_.Prepare("DELETE FROM products WHERE id = ?1;", &deleteProduct, &lastError_)) {
             db_.Execute("ROLLBACK;", nullptr);
@@ -2554,6 +4144,7 @@ bool Repository::RemoveProduct(int productId) {
         return false;
     }
     LogAudit(L"products", productId, L"Delete", L"Product and linked orders/sales were deleted");
+    RefreshInventoryAlerts();
     return true;
 }
 
@@ -2678,7 +4269,157 @@ bool Repository::ImportProductsCsv(const std::wstring& filePath, int* importedCo
     if (importedCount) {
         *importedCount = imported;
     }
+    EnsureInventoryCatalogData();
+    RefreshInventoryAlerts();
     LogAudit(L"products", 0, L"Import", L"Products imported from CSV: " + std::to_wstring(imported));
+    return true;
+}
+
+std::wstring Repository::ExportInventoryCsv(const ProductFilter& filter) {
+    if (!EnsureInitialized()) {
+        return L"";
+    }
+    if (!RequirePermission(access::Permission::ImportExportCatalog, L"Export inventory")) {
+        return L"";
+    }
+
+    const std::wstring exports = EnsureExportsDirectory();
+    if (exports.empty()) {
+        SetLastError(L"Unable to prepare exports directory.");
+        return L"";
+    }
+    const std::wstring filePath = (std::filesystem::path(exports) / L"inventory_export.csv").wstring();
+    std::wostringstream csv;
+    csv << L"SKU,Product Name,Category,Supplier,Stock,Reorder Level,Unit Price,Cost,Margin,Discount,Status,Expiry Date\r\n";
+    for (const auto& product : LoadProducts(filter)) {
+        csv << product.sku << L","
+            << L"\"" << product.name << L"\","
+            << L"\"" << product.category << L"\","
+            << L"\"" << product.supplier << L"\","
+            << product.stock << L","
+            << product.reorderLevel << L","
+            << product.price << L","
+            << product.cost << L","
+            << FormatPercent(product.marginPercent) << L","
+            << FormatPercent(product.discountPercent) << L","
+            << product.status << L","
+            << product.expirationDateIso << L"\r\n";
+    }
+    std::wstring error;
+    if (!WriteUtf8BomFile(filePath, ToUtf8(csv.str()), &error)) {
+        SetLastError(error);
+        return L"";
+    }
+    LogAudit(L"products", 0, L"Export", L"Inventory CSV exported: " + filePath);
+    return filePath;
+}
+
+bool Repository::AdjustProductStock(int productId, int delta, const std::wstring& reason) {
+    return AdjustProductStock(productId, delta, reason, L"");
+}
+
+bool Repository::AdjustProductStock(int productId, int delta, const std::wstring& reason, const std::wstring& reference) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(delta > 0 ? access::Permission::InventoryStockIn : access::Permission::InventoryStockOut, L"Adjust product stock")) {
+        return false;
+    }
+    if (delta == 0) {
+        SetLastError(L"Stock adjustment must not be zero.");
+        return false;
+    }
+
+    SqliteStatement lookup;
+    if (!db_.Prepare("SELECT stock, reorder_level, name, expiration_date, status FROM products WHERE id = ?1;", &lookup, &lastError_)) {
+        return false;
+    }
+    lookup.BindInt(1, productId);
+    if (lookup.Step() != SQLITE_ROW) {
+        SetLastError(L"Select a product before adjusting stock.");
+        return false;
+    }
+
+    const int currentStock = lookup.ColumnInt(0);
+    const int reorderLevel = lookup.ColumnInt(1);
+    const std::wstring productName = lookup.ColumnText(2);
+    const std::wstring expiryDate = lookup.ColumnText(3);
+    const std::wstring manualStatus = lookup.ColumnText(4);
+    const int nextStock = currentStock + delta;
+    if (nextStock < 0) {
+        SetLastError(L"Stock cannot become negative.");
+        LogAudit(L"products", productId, L"Denied",
+            L"Rejected stock adjustment below zero for " + productName);
+        return false;
+    }
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    const std::wstring movementType = delta > 0 ? L"Stock In" : L"Stock Out";
+    const std::wstring nextStatus = InventoryStatusFor(nextStock, reorderLevel, manualStatus, expiryDate);
+    SqliteStatement update;
+    if (!db_.Prepare(
+            "UPDATE products SET stock = ?1, status = ?2, updated_at = ?3 WHERE id = ?4;",
+            &update,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    update.BindInt(1, nextStock);
+    update.BindText(2, nextStatus);
+    update.BindText(3, CurrentTimestamp());
+    update.BindInt(4, productId);
+    if (update.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to update stock.");
+    }
+
+    SqliteStatement movement;
+    if (!db_.Prepare(
+            "INSERT INTO stock_movements(id, product_id, movement_type, quantity, previous_quantity, new_quantity, reason, reference, created_by, created_at) "
+            "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM stock_movements), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9);",
+            &movement,
+            &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    movement.BindInt(1, productId);
+    movement.BindText(2, movementType);
+    movement.BindInt(3, std::abs(delta));
+    movement.BindInt(4, currentStock);
+    movement.BindInt(5, nextStock);
+    movement.BindText(6, Trim(reason).empty() ? L"Other" : Trim(reason));
+    movement.BindText(7, Trim(reference));
+    movement.BindText(8, hasCurrentAccount_ ? currentAccount_.username : L"system");
+    movement.BindText(9, CurrentTimestamp());
+    if (movement.Step() != SQLITE_DONE) {
+        return rollback(L"Unable to record stock movement.");
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+
+    std::wostringstream details;
+    details << (delta > 0 ? L"Stock In: +" : L"Stock Out: -") << std::abs(delta)
+            << L" units for " << productName << L"; previous=" << currentStock << L"; current=" << nextStock;
+    if (!Trim(reason).empty()) {
+        details << L"; reason=" << Trim(reason);
+    }
+    if (!Trim(reference).empty()) {
+        details << L"; reference=" << Trim(reference);
+    }
+    RefreshInventoryAlerts();
+    const std::wstring normalizedReason = Trim(reason);
+    const bool warningOut = delta < 0 && (normalizedReason == L"Damage" || normalizedReason == L"Expired");
+    LogAudit(L"products", productId, delta > 0 ? L"StockIn" : (warningOut ? L"StockOutWarning" : L"StockOut"), details.str());
     return true;
 }
 
@@ -2745,6 +4486,8 @@ bool Repository::CreateQuickEntry(const std::wstring& entryType, const std::wstr
             SetLastError(L"Unable to create product from quick entry.");
             return false;
         }
+        EnsureInventoryCatalogData();
+        RefreshInventoryAlerts();
         LogAudit(L"products", nextId, L"Create", L"Product created from Quick Data Entry");
         return true;
     }
@@ -2793,6 +4536,7 @@ bool Repository::CreateQuickEntry(const std::wstring& entryType, const std::wstr
         if (!RequirePermission(access::Permission::CreateSale, L"Create sale")) {
             return false;
         }
+        return CreateDirectSale(primary, secondary, quantityText, L"0", amountText.empty() ? L"Card" : amountText, L"");
         const int clientId = ParseInt(primary, 0) > 0
             ? ParseInt(primary, 0)
             : db_.QueryScalarInt(("SELECT id FROM clients WHERE lower(company_name) = lower(" + QuoteSql(primary) + ") LIMIT 1;").c_str(), 0);
@@ -2909,6 +4653,7 @@ bool Repository::CreateQuickEntry(const std::wstring& entryType, const std::wstr
         if (!RequirePermission(access::Permission::CreateOrder, L"Create order")) {
             return false;
         }
+        return CreateOrder(primary, secondary, quantityText, L"0", L"Cash", L"0", amountText);
         const int clientId = ParseInt(primary, 0) > 0
             ? ParseInt(primary, 0)
             : db_.QueryScalarInt(("SELECT id FROM clients WHERE lower(company_name) = lower(" + QuoteSql(primary) + ") LIMIT 1;").c_str(), 0);
@@ -2969,7 +4714,7 @@ bool Repository::CreateQuickEntry(const std::wstring& entryType, const std::wstr
     }
 
     if (isEmployee) {
-        if (!RequirePermission(access::Permission::ManageUsers, L"Create employee")) {
+        if (!RequirePermission(access::Permission::EmployeesCreate, L"Create employee")) {
             return false;
         }
         const std::wstring fullName = primary;
@@ -3038,6 +4783,52 @@ bool Repository::CreateQuickEntry(const std::wstring& entryType, const std::wstr
 
     SetLastError(L"Select Product, Client, Sale, Order, Employee, or Task as quick entry type.");
     return false;
+}
+
+bool Repository::CompleteTask(int taskId) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!hasCurrentAccount_) {
+        SetLastError(L"Access denied: sign in before completing tasks.");
+        return false;
+    }
+
+    const access::DataScope scope = access::TaskScope(access::RoleForAccount(currentAccount_));
+    if (scope == access::DataScope::None) {
+        SetLastError(L"Completing tasks is not allowed for role: " + currentAccount_.role);
+        LogAudit(L"security", currentAccount_.id, L"Denied", L"Complete task denied for role " + currentAccount_.role);
+        return false;
+    }
+
+    SqliteStatement lookup;
+    if (!db_.Prepare("SELECT assigned_to, status FROM tasks WHERE id = ?1;", &lookup, &lastError_)) {
+        return false;
+    }
+    lookup.BindInt(1, taskId);
+    if (lookup.Step() != SQLITE_ROW) {
+        SetLastError(L"Select an existing task first.");
+        return false;
+    }
+
+    const std::wstring assignedTo = lookup.ColumnText(0);
+    if (scope == access::DataScope::Own && assignedTo != currentAccount_.fullName) {
+        SetLastError(L"You can complete only your own tasks.");
+        LogAudit(L"security", taskId, L"Denied", L"Task completion denied for " + currentAccount_.username);
+        return false;
+    }
+
+    SqliteStatement update;
+    if (!db_.Prepare("UPDATE tasks SET status = 'Done' WHERE id = ?1;", &update, &lastError_)) {
+        return false;
+    }
+    update.BindInt(1, taskId);
+    if (update.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to complete task.");
+        return false;
+    }
+    LogAudit(L"tasks", taskId, L"Complete", L"Task marked as done");
+    return true;
 }
 
 bool Repository::AddDemoClient() {
@@ -3210,7 +5001,7 @@ bool Repository::AddDemoAccount() {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageUsers, L"Create user account")) {
+    if (!RequirePermission(access::Permission::UsersCreate, L"Create user account")) {
         return false;
     }
 
@@ -3222,12 +5013,16 @@ bool Repository::AddDemoAccount() {
     username << L"demo.user" << nextId;
 
     std::ostringstream sql;
-    sql << "INSERT INTO users(id, full_name, username, email, role, password_hash, status, last_login, created_at) VALUES("
+    const std::wstring role = roles[nextId % 3];
+    const int roleId = db_.QueryScalarInt(("SELECT id FROM roles WHERE lower(name) = lower(" + QuoteSql(role) + ") LIMIT 1;").c_str(), 0);
+
+    sql << "INSERT INTO users(id, full_name, username, email, role, role_id, password_hash, status, last_login, created_at) VALUES("
         << nextId << ","
         << QuoteSql(fullName.str()) << ","
         << QuoteSql(username.str()) << ","
         << QuoteSql(username.str() + L"@company.example") << ","
-        << QuoteSql(roles[nextId % 3]) << ","
+        << QuoteSql(role) << ","
+        << (roleId > 0 ? std::to_string(roleId) : "NULL") << ","
         << QuoteSql(DemoPasswordHash(L"demo123")) << ","
         << QuoteSql(L"Active") << ","
         << QuoteSql(L"Never") << ","
@@ -3243,7 +5038,7 @@ bool Repository::ToggleAccountStatus(int userId) {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageUsers, L"Lock or unlock user account")) {
+    if (!RequirePermission(access::Permission::UsersDisable, L"Lock or unlock user account")) {
         return false;
     }
 
@@ -3272,7 +5067,7 @@ bool Repository::ResetAccountPassword(int userId) {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageUsers, L"Reset user account password")) {
+    if (!RequirePermission(access::Permission::UsersEdit, L"Reset user account password")) {
         return false;
     }
 
@@ -3290,7 +5085,7 @@ bool Repository::CycleAccountRole(int userId) {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageRoles, L"Change user role")) {
+    if (!RequirePermission(access::Permission::RolesEdit, L"Change user role")) {
         return false;
     }
 
@@ -3306,18 +5101,32 @@ bool Repository::CycleAccountRole(int userId) {
 
     const std::wstring current = statement.ColumnText(0);
     std::wstring next = L"Sales Manager";
-    if (current == L"Sales Manager" || current == L"Manager" || current == L"Sales Operator" || current == L"Account Manager") {
+    if (current == L"System Administrator" || current == L"Administrator" || current == L"Admin") {
+        next = L"Director";
+    } else if (current == L"Director" || current == L"Commercial Director") {
         next = L"Head of Sales";
     } else if (current == L"Head of Sales" || current == L"Supervisor" || current == L"Regional Sales Manager") {
-        next = L"Director";
-    } else if (current == L"Director" || current == L"Commercial Director" || current == L"Sales Analyst") {
+        next = L"Sales Manager";
+    } else if (current == L"Sales Manager" || current == L"Manager" || current == L"Sales Operator" || current == L"Account Manager") {
+        next = L"Cashier";
+    } else if (current == L"Cashier" || current == L"Seller" || current == L"POS Operator") {
         next = L"Product Manager";
     } else if (current == L"Product Manager" || current == L"Procurement Controller") {
+        next = L"Warehouse Worker";
+    } else if (current == L"Warehouse Worker" || current == L"Stock Manager" || current == L"Storekeeper") {
+        next = L"Accountant";
+    } else if (current == L"Accountant" || current == L"Finance") {
+        next = L"Analyst";
+    } else if (current == L"Analyst" || current == L"Sales Analyst" || current == L"Business Analyst") {
         next = L"System Administrator";
+    } else if (current == L"SuperAdmin") {
+        next = L"System Administrator";
+    } else if (current.empty()) {
+        next = L"Head of Sales";
     }
 
     SqliteStatement update;
-    if (!db_.Prepare("UPDATE users SET role = ?1 WHERE id = ?2;", &update, &lastError_)) {
+    if (!db_.Prepare("UPDATE users SET role = ?1, role_id = (SELECT id FROM roles WHERE lower(name) = lower(?1) LIMIT 1) WHERE id = ?2;", &update, &lastError_)) {
         return false;
     }
     update.BindText(1, next);
@@ -3330,11 +5139,49 @@ bool Repository::CycleAccountRole(int userId) {
     return true;
 }
 
+bool Repository::SetAccountRole(int userId, int roleId) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    if (!RequirePermission(access::Permission::RolesEdit, L"Change user role")) {
+        return false;
+    }
+    if (userId <= 0 || roleId <= 0) {
+        SetLastError(L"Select an account and role before saving.");
+        return false;
+    }
+
+    SqliteStatement roleStatement;
+    if (!db_.Prepare("SELECT name FROM roles WHERE id = ?1 LIMIT 1;", &roleStatement, &lastError_)) {
+        return false;
+    }
+    roleStatement.BindInt(1, roleId);
+    if (roleStatement.Step() != SQLITE_ROW) {
+        SetLastError(L"Selected role was not found.");
+        return false;
+    }
+    const std::wstring roleName = roleStatement.ColumnText(0);
+
+    SqliteStatement update;
+    if (!db_.Prepare("UPDATE users SET role = ?1, role_id = ?2 WHERE id = ?3;", &update, &lastError_)) {
+        return false;
+    }
+    update.BindText(1, roleName);
+    update.BindInt(2, roleId);
+    update.BindInt(3, userId);
+    if (update.Step() != SQLITE_DONE) {
+        SetLastError(L"Unable to change account role.");
+        return false;
+    }
+    LogAudit(L"users", userId, L"ChangeRole", L"Account role changed to " + roleName);
+    return true;
+}
+
 bool Repository::DeleteAccount(int userId) {
     if (!EnsureInitialized()) {
         return false;
     }
-    if (!RequirePermission(access::Permission::ManageUsers, L"Delete user account")) {
+    if (!RequirePermission(access::Permission::UsersDelete, L"Delete user account")) {
         return false;
     }
 
@@ -3384,7 +5231,8 @@ bool Repository::AuthenticateUser(const std::wstring& username, const std::wstri
     statement.BindText(1, normalizedUsername);
 
     if (statement.Step() != SQLITE_ROW) {
-        SetLastError(L"Account was not found.");
+        SetLastError(L"Account was not found. Try superadmin / demo123.");
+        LogAudit(L"users", 0, L"LoginFailed", L"Unknown account sign-in attempt: " + normalizedUsername);
         return false;
     }
 
@@ -3401,6 +5249,7 @@ bool Repository::AuthenticateUser(const std::wstring& username, const std::wstri
 
     if (record.status != L"Active") {
         SetLastError(L"This account is suspended. Unlock it in Settings.");
+        LogAudit(L"users", record.id, L"LoginBlocked", L"Suspended or blocked account attempted sign-in: " + record.username);
         return false;
     }
 
@@ -3408,9 +5257,11 @@ bool Repository::AuthenticateUser(const std::wstring& username, const std::wstri
     const bool isModernHash = (storedHash == expectedHash);
     const bool isLegacySeedHash = (storedHash == L"demo_hash_2026" && password == L"demo123");
     const bool isLegacyPlainText = (storedHash == password && password == L"Temp#2026");
-    const bool passwordMatches = isModernHash || isLegacySeedHash || isLegacyPlainText;
+    const bool isSeededDemoPassword = (password == L"demo123" && IsSeededDemoAccount(record.username));
+    const bool passwordMatches = isModernHash || isLegacySeedHash || isLegacyPlainText || isSeededDemoPassword;
     if (!passwordMatches) {
         SetLastError(L"Incorrect username or password.");
+        LogAudit(L"users", record.id, L"LoginFailed", L"Invalid password for account: " + record.username);
         return false;
     }
 
@@ -3467,8 +5318,8 @@ bool Repository::RegisterAccount(const std::wstring& fullName, const std::wstrin
     const int nextId = db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM users;", 1);
     SqliteStatement insert;
     if (!db_.Prepare(
-            "INSERT INTO users(id, full_name, username, email, role, password_hash, status, last_login, created_at) "
-            "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9);",
+            "INSERT INTO users(id, full_name, username, email, role, role_id, password_hash, status, last_login, created_at) "
+            "VALUES(?1, ?2, ?3, ?4, ?5, (SELECT id FROM roles WHERE lower(name) = lower(?5) LIMIT 1), ?6, ?7, ?8, ?9);",
             &insert,
             &lastError_)) {
         return false;
@@ -3488,6 +5339,25 @@ bool Repository::RegisterAccount(const std::wstring& fullName, const std::wstrin
     }
     LogAudit(L"users", nextId, L"Register", L"New account registered from login window");
     return true;
+}
+
+bool Repository::HasPermission(access::Permission permission) const {
+    return hasCurrentAccount_ && access::HasPermission(currentAccount_, permission);
+}
+
+bool Repository::LogAccessDenied(const std::wstring& module, const std::wstring& details) {
+    if (!EnsureInitialized()) {
+        return false;
+    }
+    const int entityId = hasCurrentAccount_ ? currentAccount_.id : 0;
+    return LogAudit(module.empty() ? L"security" : module, entityId, L"Denied", details);
+}
+
+bool Repository::LogLogout() {
+    if (!EnsureInitialized() || !hasCurrentAccount_) {
+        return false;
+    }
+    return LogAudit(L"users", currentAccount_.id, L"Logout", L"User signed out");
 }
 
 AccountRecord Repository::CurrentAccount() const {
@@ -3519,10 +5389,12 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL,
     role TEXT NOT NULL,
+    role_id INTEGER,
     password_hash TEXT NOT NULL,
     status TEXT NOT NULL,
     last_login TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
 CREATE TABLE IF NOT EXISTS roles (
@@ -3530,6 +5402,13 @@ CREATE TABLE IF NOT EXISTS roles (
     name TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL,
     default_start_page TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    module TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS role_permissions (
@@ -3560,6 +5439,7 @@ CREATE TABLE IF NOT EXISTS products (
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
+    category_id INTEGER,
     stock INTEGER NOT NULL,
     reorder_level INTEGER NOT NULL,
     price REAL NOT NULL,
@@ -3567,9 +5447,60 @@ CREATE TABLE IF NOT EXISTS products (
     discount_percent REAL NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
     supplier TEXT NOT NULL,
+    supplier_id INTEGER,
     margin_percent REAL NOT NULL,
     expiration_date TEXT NOT NULL DEFAULT '2026-12-31',
-    batch_code TEXT NOT NULL DEFAULT 'BATCH-DEMO'
+    batch_code TEXT NOT NULL DEFAULT 'BATCH-DEMO',
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT,
+    FOREIGN KEY (category_id) REFERENCES categories(id),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    contact_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stock_movements (
+    id INTEGER PRIMARY KEY,
+    product_id INTEGER NOT NULL,
+    movement_type TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    previous_quantity INTEGER NOT NULL,
+    new_quantity INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    reference TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_alerts (
+    id INTEGER PRIMARY KEY,
+    product_id INTEGER NOT NULL,
+    alert_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Open',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
 CREATE TABLE IF NOT EXISTS employees (
@@ -3583,13 +5514,27 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY,
     order_code TEXT NOT NULL UNIQUE,
+    order_number TEXT,
     client_id INTEGER NOT NULL,
+    customer_id INTEGER,
     product_id INTEGER NOT NULL,
+    created_by INTEGER,
+    assigned_to INTEGER,
     quantity INTEGER NOT NULL,
+    subtotal REAL NOT NULL DEFAULT 0,
+    discount_amount REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
+    total_amount REAL NOT NULL DEFAULT 0,
     total_price REAL NOT NULL,
     order_date TEXT NOT NULL,
     status TEXT NOT NULL,
+    payment_status TEXT NOT NULL DEFAULT 'Unpaid',
+    payment_method TEXT NOT NULL DEFAULT 'Cash',
     priority TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT,
+    completed_at TEXT,
     FOREIGN KEY (client_id) REFERENCES clients(id),
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
@@ -3597,22 +5542,77 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS sales (
     id INTEGER PRIMARY KEY,
     sale_code TEXT NOT NULL UNIQUE,
+    sale_number TEXT,
+    order_id INTEGER,
     employee_id INTEGER NOT NULL,
+    cashier_id INTEGER,
     client_id INTEGER NOT NULL,
+    customer_id INTEGER,
     product_id INTEGER NOT NULL,
     channel TEXT NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 1,
     unit_price REAL NOT NULL DEFAULT 0,
+    subtotal REAL NOT NULL DEFAULT 0,
+    discount_amount REAL NOT NULL DEFAULT 0,
+    tax_amount REAL NOT NULL DEFAULT 0,
     revenue REAL NOT NULL,
     total_amount REAL NOT NULL DEFAULT 0,
+    margin_amount REAL NOT NULL DEFAULT 0,
     margin_percent REAL NOT NULL,
     sale_date TEXT NOT NULL,
+    created_at TEXT,
     status TEXT NOT NULL,
     payment_method TEXT NOT NULL DEFAULT 'Card',
     cancellation_reason TEXT,
     FOREIGN KEY (employee_id) REFERENCES employees(id),
     FOREIGN KEY (client_id) REFERENCES clients(id),
     FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY,
+    order_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    sku TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price REAL NOT NULL,
+    cost_price REAL NOT NULL DEFAULT 0,
+    discount_percent REAL NOT NULL DEFAULT 0,
+    line_total REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE IF NOT EXISTS sale_items (
+    id INTEGER PRIMARY KEY,
+    sale_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    sku TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price REAL NOT NULL,
+    cost_price REAL NOT NULL DEFAULT 0,
+    line_total REAL NOT NULL,
+    margin_amount REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (sale_id) REFERENCES sales(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY,
+    order_id INTEGER,
+    sale_id INTEGER,
+    amount REAL NOT NULL,
+    payment_method TEXT NOT NULL,
+    payment_status TEXT NOT NULL,
+    reference TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (sale_id) REFERENCES sales(id)
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_deals (
@@ -3648,16 +5648,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action TEXT NOT NULL,
     user_name TEXT NOT NULL,
     details TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'Info'
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(order_date);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date);
 CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_payments_order_sale ON payments(order_id, sale_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_stage ON pipeline_deals(stage);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date, status);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_inventory_alerts_status ON inventory_alerts(status, alert_type);
 )sql";
 
     if (!db_.Execute(kSchemaSql, &lastError_)) {
@@ -3673,6 +5679,31 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
             return false;
         }
     }
+    if (!ColumnExists("products", "category_id")) {
+        if (!db_.Execute("ALTER TABLE products ADD COLUMN category_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("products", "supplier_id")) {
+        if (!db_.Execute("ALTER TABLE products ADD COLUMN supplier_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("products", "description")) {
+        if (!db_.Execute("ALTER TABLE products ADD COLUMN description TEXT NOT NULL DEFAULT '';", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("products", "created_at")) {
+        if (!db_.Execute("ALTER TABLE products ADD COLUMN created_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("products", "updated_at")) {
+        if (!db_.Execute("ALTER TABLE products ADD COLUMN updated_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
     if (!ColumnExists("products", "cost")) {
         if (!db_.Execute("ALTER TABLE products ADD COLUMN cost REAL NOT NULL DEFAULT 0;", &lastError_)) {
             return false;
@@ -3685,6 +5716,126 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
     }
     if (!ColumnExists("clients", "manager_employee_id")) {
         if (!db_.Execute("ALTER TABLE clients ADD COLUMN manager_employee_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("users", "role_id")) {
+        if (!db_.Execute("ALTER TABLE users ADD COLUMN role_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("audit_log", "severity")) {
+        if (!db_.Execute("ALTER TABLE audit_log ADD COLUMN severity TEXT NOT NULL DEFAULT 'Info';", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "created_by")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN created_by INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "order_number")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN order_number TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "customer_id")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN customer_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "assigned_to")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN assigned_to INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "subtotal")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN subtotal REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "discount_amount")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "tax_amount")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "total_amount")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN total_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "payment_status")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'Unpaid';", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "payment_method")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'Cash';", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "notes")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN notes TEXT NOT NULL DEFAULT '';", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "created_at")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN created_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "updated_at")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN updated_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("orders", "completed_at")) {
+        if (!db_.Execute("ALTER TABLE orders ADD COLUMN completed_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "order_id")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN order_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "sale_number")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN sale_number TEXT;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "cashier_id")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN cashier_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "customer_id")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN customer_id INTEGER;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "subtotal")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN subtotal REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "discount_amount")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "tax_amount")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
+            return false;
+        }
+    }
+    if (!ColumnExists("sales", "margin_amount")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN margin_amount REAL NOT NULL DEFAULT 0;", &lastError_)) {
             return false;
         }
     }
@@ -3708,12 +5859,17 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
             return false;
         }
     }
+    if (!ColumnExists("sales", "created_at")) {
+        if (!db_.Execute("ALTER TABLE sales ADD COLUMN created_at TEXT;", &lastError_)) {
+            return false;
+        }
+    }
     if (!ColumnExists("sales", "cancellation_reason")) {
         if (!db_.Execute("ALTER TABLE sales ADD COLUMN cancellation_reason TEXT;", &lastError_)) {
             return false;
         }
     }
-    return BackfillProductExpiryData() && BackfillExtendedData();
+    return BackfillProductExpiryData() && BackfillExtendedData() && BackfillLifecycleData() && EnsureInventoryCatalogData() && RefreshInventoryAlerts();
 }
 
 bool Repository::ColumnExists(const std::string& table, const std::string& column) {
@@ -3771,6 +5927,279 @@ bool Repository::BackfillExtendedData() {
     return true;
 }
 
+bool Repository::BackfillLifecycleData() {
+    if (!db_.Execute(
+            "UPDATE orders "
+            "SET subtotal = CASE WHEN subtotal <= 0 THEN total_price ELSE subtotal END, "
+            "    total_amount = CASE WHEN total_amount <= 0 THEN total_price ELSE total_amount END, "
+            "    payment_status = CASE WHEN payment_status IS NULL OR payment_status = '' THEN 'Unpaid' ELSE payment_status END, "
+            "    payment_method = CASE WHEN payment_method IS NULL OR payment_method = '' THEN 'Cash' ELSE payment_method END, "
+            "    status = CASE WHEN status = 'Processing' THEN 'Pending' ELSE status END, "
+            "    order_number = CASE WHEN order_number IS NULL OR order_number = '' THEN order_code ELSE order_number END, "
+            "    customer_id = CASE WHEN customer_id IS NULL OR customer_id <= 0 THEN client_id ELSE customer_id END, "
+            "    created_at = CASE WHEN created_at IS NULL OR created_at = '' THEN order_date ELSE created_at END, "
+            "    updated_at = CASE WHEN updated_at IS NULL OR updated_at = '' THEN order_date ELSE updated_at END;",
+            &lastError_)) {
+        return false;
+    }
+
+    if (!db_.Execute(
+            "UPDATE sales "
+            "SET subtotal = CASE WHEN subtotal <= 0 THEN total_amount ELSE subtotal END, "
+            "    sale_number = CASE WHEN sale_number IS NULL OR sale_number = '' THEN sale_code ELSE sale_number END, "
+            "    customer_id = CASE WHEN customer_id IS NULL OR customer_id <= 0 THEN client_id ELSE customer_id END, "
+            "    created_at = CASE WHEN created_at IS NULL OR created_at = '' THEN sale_date ELSE created_at END, "
+            "    margin_amount = CASE WHEN margin_amount = 0 THEN ROUND(total_amount * margin_percent / 100.0, 2) ELSE margin_amount END, "
+            "    cashier_id = CASE WHEN cashier_id IS NULL THEN employee_id ELSE cashier_id END;",
+            &lastError_)) {
+        return false;
+    }
+
+    if (!db_.Execute(
+            "INSERT INTO order_items(id, order_id, product_id, sku, product_name, quantity, unit_price, cost_price, discount_percent, line_total, created_at) "
+            "SELECT (SELECT COALESCE(MAX(id), 0) FROM order_items) + orders.id, orders.id, orders.product_id, "
+            "       COALESCE(products.sku, ''), COALESCE(products.name, ''), orders.quantity, "
+            "       CASE WHEN orders.quantity > 0 THEN orders.total_price / orders.quantity ELSE COALESCE(products.price, 0) END, "
+            "       COALESCE(products.cost, 0), COALESCE(products.discount_percent, 0), orders.total_price, "
+            "       COALESCE(orders.created_at, orders.order_date) "
+            "FROM orders "
+            "LEFT JOIN products ON products.id = orders.product_id "
+            "WHERE NOT EXISTS (SELECT 1 FROM order_items WHERE order_items.order_id = orders.id);",
+            &lastError_)) {
+        return false;
+    }
+
+    if (!db_.Execute(
+            "INSERT INTO sale_items(id, sale_id, product_id, sku, product_name, quantity, unit_price, cost_price, line_total, margin_amount, created_at) "
+            "SELECT (SELECT COALESCE(MAX(id), 0) FROM sale_items) + sales.id, sales.id, sales.product_id, "
+            "       COALESCE(products.sku, ''), COALESCE(products.name, ''), sales.quantity, sales.unit_price, "
+            "       COALESCE(products.cost, 0), sales.total_amount, ROUND(sales.total_amount * sales.margin_percent / 100.0, 2), sales.sale_date "
+            "FROM sales "
+            "LEFT JOIN products ON products.id = sales.product_id "
+            "WHERE NOT EXISTS (SELECT 1 FROM sale_items WHERE sale_items.sale_id = sales.id);",
+            &lastError_)) {
+        return false;
+    }
+
+    if (!db_.Execute(
+            "INSERT INTO payments(id, order_id, sale_id, amount, payment_method, payment_status, reference, created_by, created_at) "
+            "SELECT (SELECT COALESCE(MAX(id), 0) FROM payments) + sales.id, NULL, sales.id, sales.total_amount, "
+            "       COALESCE(sales.payment_method, 'Card'), 'Paid', sales.sale_code, COALESCE(users.username, 'system'), sales.sale_date "
+            "FROM sales "
+            "LEFT JOIN users ON users.full_name = (SELECT employees.full_name FROM employees WHERE employees.id = sales.employee_id LIMIT 1) "
+            "WHERE NOT EXISTS (SELECT 1 FROM payments WHERE payments.sale_id = sales.id);",
+            &lastError_)) {
+        return false;
+    }
+    return true;
+}
+
+bool Repository::EnsureInventoryCatalogData() {
+    const std::wstring now = CurrentTimestamp();
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    SqliteStatement categories;
+    if (!db_.Prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND trim(category) <> '';", &categories, &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    while (categories.Step() == SQLITE_ROW) {
+        const std::wstring category = categories.ColumnText(0);
+        SqliteStatement insertCategory;
+        if (!db_.Prepare(
+                "INSERT OR IGNORE INTO categories(id, name, description, status, created_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM categories), ?1, ?2, 'Active', ?3);",
+                &insertCategory,
+                &lastError_)) {
+            return rollback(L"Unable to prepare category backfill.");
+        }
+        insertCategory.BindText(1, category);
+        insertCategory.BindText(2, L"Imported from existing product catalog");
+        insertCategory.BindText(3, now);
+        if (insertCategory.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to backfill categories.");
+        }
+    }
+
+    SqliteStatement suppliers;
+    if (!db_.Prepare("SELECT DISTINCT supplier FROM products WHERE supplier IS NOT NULL AND trim(supplier) <> '';", &suppliers, &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    while (suppliers.Step() == SQLITE_ROW) {
+        const std::wstring supplier = suppliers.ColumnText(0);
+        SqliteStatement insertSupplier;
+        if (!db_.Prepare(
+                "INSERT OR IGNORE INTO suppliers(id, name, contact_name, phone, email, address, status, created_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM suppliers), ?1, ?2, '', '', '', 'Active', ?3);",
+                &insertSupplier,
+                &lastError_)) {
+            return rollback(L"Unable to prepare supplier backfill.");
+        }
+        insertSupplier.BindText(1, supplier);
+        insertSupplier.BindText(2, supplier + L" contact");
+        insertSupplier.BindText(3, now);
+        if (insertSupplier.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to backfill suppliers.");
+        }
+    }
+
+    if (!db_.Execute(
+            "UPDATE products "
+            "SET category_id = (SELECT categories.id FROM categories WHERE lower(categories.name) = lower(products.category) LIMIT 1) "
+            "WHERE category_id IS NULL;",
+            &lastError_)) {
+        return rollback(L"Unable to link product categories.");
+    }
+    if (!db_.Execute(
+            "UPDATE products "
+            "SET supplier_id = (SELECT suppliers.id FROM suppliers WHERE lower(suppliers.name) = lower(products.supplier) LIMIT 1) "
+            "WHERE supplier_id IS NULL;",
+            &lastError_)) {
+        return rollback(L"Unable to link product suppliers.");
+    }
+    if (!db_.Execute(
+            "UPDATE products "
+            "SET created_at = CASE WHEN created_at IS NULL OR created_at = '' THEN CURRENT_TIMESTAMP ELSE created_at END, "
+            "    updated_at = CASE WHEN updated_at IS NULL OR updated_at = '' THEN CURRENT_TIMESTAMP ELSE updated_at END;",
+            &lastError_)) {
+        return rollback(L"Unable to backfill product timestamps.");
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    return true;
+}
+
+bool Repository::RefreshInventoryAlerts() {
+    if (!db_.IsOpen()) {
+        return false;
+    }
+
+    SqliteStatement products;
+    if (!db_.Prepare("SELECT id, name, stock, reorder_level, expiration_date, status FROM products;", &products, &lastError_)) {
+        return false;
+    }
+
+    struct DesiredAlert {
+        int productId{};
+        std::wstring type;
+        std::wstring message;
+        std::wstring severity;
+    };
+    std::vector<DesiredAlert> desired;
+    while (products.Step() == SQLITE_ROW) {
+        const int productId = products.ColumnInt(0);
+        const std::wstring name = products.ColumnText(1);
+        const int stock = products.ColumnInt(2);
+        const int reorder = products.ColumnInt(3);
+        const std::wstring expiry = products.ColumnText(4);
+        const std::wstring manualStatus = products.ColumnText(5);
+        if (manualStatus == L"Discontinued") {
+            continue;
+        }
+        if (stock <= 0) {
+            desired.push_back({ productId, L"Out of Stock", name + L" is out of stock.", L"Critical" });
+        } else if (stock <= reorder) {
+            desired.push_back({ productId, L"Low Stock", name + L" is below reorder level.", L"Warning" });
+        }
+        const int days = DaysFromToday(expiry);
+        if (days < 0) {
+            desired.push_back({ productId, L"Expired", name + L" has expired.", L"Critical" });
+        } else if (days <= 30) {
+            desired.push_back({ productId, L"Expiring Soon", name + L" expires within 30 days.", L"Warning" });
+        }
+    }
+
+    if (!db_.Execute("BEGIN IMMEDIATE;", &lastError_)) {
+        return false;
+    }
+    const auto rollback = [this](const std::wstring& message) {
+        db_.Execute("ROLLBACK;", nullptr);
+        SetLastError(message);
+        return false;
+    };
+
+    for (const auto& alert : desired) {
+        const int existingOpen = db_.QueryScalarInt(
+            ("SELECT COUNT(*) FROM inventory_alerts WHERE product_id = " + std::to_string(alert.productId)
+                + " AND alert_type = " + QuoteSql(alert.type) + " AND status = 'Open';").c_str(),
+            0);
+        if (existingOpen > 0) {
+            std::ostringstream update;
+            update << "UPDATE inventory_alerts SET message = " << QuoteSql(alert.message)
+                   << ", severity = " << QuoteSql(alert.severity)
+                   << " WHERE product_id = " << alert.productId
+                   << " AND alert_type = " << QuoteSql(alert.type)
+                   << " AND status = 'Open';";
+            if (!db_.Execute(update.str(), &lastError_)) {
+                return rollback(L"Unable to update inventory alert.");
+            }
+            continue;
+        }
+
+        SqliteStatement insert;
+        if (!db_.Prepare(
+                "INSERT INTO inventory_alerts(id, product_id, alert_type, message, severity, status, created_at, resolved_at) "
+                "VALUES((SELECT COALESCE(MAX(id), 0) + 1 FROM inventory_alerts), ?1, ?2, ?3, ?4, 'Open', ?5, NULL);",
+                &insert,
+                &lastError_)) {
+            db_.Execute("ROLLBACK;", nullptr);
+            return false;
+        }
+        insert.BindInt(1, alert.productId);
+        insert.BindText(2, alert.type);
+        insert.BindText(3, alert.message);
+        insert.BindText(4, alert.severity);
+        insert.BindText(5, CurrentTimestamp());
+        if (insert.Step() != SQLITE_DONE) {
+            return rollback(L"Unable to create inventory alert.");
+        }
+    }
+
+    std::vector<int> resolveIds;
+    SqliteStatement openAlerts;
+    if (!db_.Prepare("SELECT id, product_id, alert_type FROM inventory_alerts WHERE status = 'Open';", &openAlerts, &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    while (openAlerts.Step() == SQLITE_ROW) {
+        const int alertId = openAlerts.ColumnInt(0);
+        const int productId = openAlerts.ColumnInt(1);
+        const std::wstring alertType = openAlerts.ColumnText(2);
+        const bool stillActive = std::any_of(desired.begin(), desired.end(), [&](const DesiredAlert& alert) {
+            return alert.productId == productId && alert.type == alertType;
+        });
+        if (!stillActive) {
+            resolveIds.push_back(alertId);
+        }
+    }
+    openAlerts.Reset();
+    for (int alertId : resolveIds) {
+        std::ostringstream resolve;
+        resolve << "UPDATE inventory_alerts SET status = 'Resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = " << alertId << ";";
+        if (!db_.Execute(resolve.str(), &lastError_)) {
+            return rollback(L"Unable to resolve inventory alert.");
+        }
+    }
+
+    if (!db_.Execute("COMMIT;", &lastError_)) {
+        db_.Execute("ROLLBACK;", nullptr);
+        return false;
+    }
+    return true;
+}
+
 bool Repository::SeedDemoData() {
     if (!db_.Execute(BuildSeedScript(), &lastError_)) {
         return false;
@@ -3797,60 +6226,153 @@ bool Repository::EnsureDefaultRoles() {
         << "(1," << QuoteSql(L"System Administrator") << "," << QuoteSql(L"Users, roles, settings, and audit control") << "," << QuoteSql(L"Settings") << "),"
         << "(2," << QuoteSql(L"Director") << "," << QuoteSql(L"Executive monitoring, analytics, reports, and read-only operations") << "," << QuoteSql(L"Dashboard") << "),"
         << "(3," << QuoteSql(L"Head of Sales") << "," << QuoteSql(L"Team sales control, tasks, funnel, and operational reports") << "," << QuoteSql(L"Dashboard") << "),"
-        << "(4," << QuoteSql(L"Sales Manager") << "," << QuoteSql(L"Own clients, own sales, tasks, and product catalog access") << "," << QuoteSql(L"Sales") << "),"
-        << "(5," << QuoteSql(L"Product Manager") << "," << QuoteSql(L"Product catalog, prices, inventory, and catalog import/export") << "," << QuoteSql(L"Products") << ");";
+        << "(4," << QuoteSql(L"Sales Manager") << "," << QuoteSql(L"Own customers, own sales, tasks, and inventory access") << "," << QuoteSql(L"Sales") << "),"
+        << "(5," << QuoteSql(L"Product Manager") << "," << QuoteSql(L"Inventory catalog, prices, stock, and import/export") << "," << QuoteSql(L"Inventory") << "),"
+        << "(6," << QuoteSql(L"Cashier") << "," << QuoteSql(L"Fast sales entry, orders, returns, and customer lookup") << "," << QuoteSql(L"Sales") << "),"
+        << "(7," << QuoteSql(L"Warehouse Worker") << "," << QuoteSql(L"Stock control, receiving, write-offs, and expiration monitoring") << "," << QuoteSql(L"Inventory") << "),"
+        << "(8," << QuoteSql(L"Accountant") << "," << QuoteSql(L"Financial reports, revenue exports, and settlement checks") << "," << QuoteSql(L"Reports") << "),"
+        << "(9," << QuoteSql(L"Analyst") << "," << QuoteSql(L"Analytics, trends, reports, and read-only operational data") << "," << QuoteSql(L"Analytics") << "),"
+        << "(10," << QuoteSql(L"SuperAdmin") << "," << QuoteSql(L"Full emergency access for project demonstration and recovery") << "," << QuoteSql(L"Dashboard") << ");";
 
     sql << "UPDATE users SET role = " << QuoteSql(L"System Administrator")
         << " WHERE role IN (" << QuoteSql(L"Administrator") << "," << QuoteSql(L"Admin") << ");";
     sql << "UPDATE users SET role = " << QuoteSql(L"Director")
-        << " WHERE role IN (" << QuoteSql(L"Commercial Director") << "," << QuoteSql(L"Sales Analyst") << ");";
+        << " WHERE role IN (" << QuoteSql(L"Commercial Director") << ");";
     sql << "UPDATE users SET role = " << QuoteSql(L"Head of Sales")
         << " WHERE role IN (" << QuoteSql(L"Supervisor") << "," << QuoteSql(L"Regional Sales Manager") << ");";
     sql << "UPDATE users SET role = " << QuoteSql(L"Sales Manager")
         << " WHERE role IN (" << QuoteSql(L"Manager") << "," << QuoteSql(L"Sales Operator") << "," << QuoteSql(L"Account Manager") << "," << QuoteSql(L"Key Account Manager") << ");";
     sql << "UPDATE users SET role = " << QuoteSql(L"Product Manager")
         << " WHERE role IN (" << QuoteSql(L"Procurement Controller") << "," << QuoteSql(L"Inventory Manager") << ");";
+    sql << "UPDATE users SET role = " << QuoteSql(L"Cashier")
+        << " WHERE role IN (" << QuoteSql(L"Seller") << "," << QuoteSql(L"Sales Cashier") << "," << QuoteSql(L"POS Operator") << ");";
+    sql << "UPDATE users SET role = " << QuoteSql(L"Warehouse Worker")
+        << " WHERE role IN (" << QuoteSql(L"Stock Manager") << "," << QuoteSql(L"Warehouse") << "," << QuoteSql(L"Storekeeper") << ");";
+    sql << "UPDATE users SET role = " << QuoteSql(L"Accountant")
+        << " WHERE role IN (" << QuoteSql(L"Finance") << "," << QuoteSql(L"Bookkeeper") << ");";
+    sql << "UPDATE users SET role = " << QuoteSql(L"Analyst")
+        << " WHERE role IN (" << QuoteSql(L"Sales Analyst") << "," << QuoteSql(L"Business Analyst") << ");";
+    sql << "UPDATE roles SET default_start_page = " << QuoteSql(L"Inventory")
+        << " WHERE default_start_page = " << QuoteSql(L"Products") << ";";
+    sql << "UPDATE roles SET default_start_page = " << QuoteSql(L"Customers")
+        << " WHERE default_start_page = " << QuoteSql(L"Clients") << ";";
+
+    int permissionId = 1;
+    for (const auto permission : access::AllPermissions()) {
+        sql << "INSERT OR REPLACE INTO permissions(id, code, description, module) VALUES("
+            << permissionId++ << ","
+            << QuoteSql(access::PermissionCode(permission)) << ","
+            << QuoteSql(access::PermissionDescription(permission)) << ","
+            << QuoteSql(access::PermissionModule(permission)) << ");";
+    }
 
     const struct PermissionSeed {
         int roleId;
-        const wchar_t* permission;
+        access::Permission permission;
         const wchar_t* scope;
     } permissions[] = {
-        {1, L"manage_users", L"all"}, {1, L"manage_roles", L"all"}, {1, L"manage_settings", L"all"}, {1, L"view_audit", L"all"},
-        {2, L"view_dashboard", L"all"}, {2, L"view_analytics", L"all"}, {2, L"export_reports", L"all"}, {2, L"read_operational_data", L"all"},
-        {3, L"view_team_sales", L"team"}, {3, L"change_sale_status", L"team"}, {3, L"manage_tasks", L"team"}, {3, L"export_operational_reports", L"team"},
-        {4, L"create_sale", L"own"}, {4, L"change_sale_status", L"own"}, {4, L"create_client", L"own"}, {4, L"edit_client", L"own"}, {4, L"read_products", L"all"},
-        {5, L"create_product", L"all"}, {5, L"edit_product", L"all"}, {5, L"delete_product", L"all"}, {5, L"import_export_catalog", L"all"}
+        {1, access::Permission::DashboardView, L"all"},
+        {1, access::Permission::UsersView, L"all"}, {1, access::Permission::UsersCreate, L"all"},
+        {1, access::Permission::UsersEdit, L"all"}, {1, access::Permission::UsersDisable, L"all"},
+        {1, access::Permission::RolesView, L"all"}, {1, access::Permission::RolesEdit, L"all"},
+        {1, access::Permission::AuditView, L"all"}, {1, access::Permission::AuditExport, L"all"},
+        {1, access::Permission::SettingsView, L"all"}, {1, access::Permission::SettingsEdit, L"all"},
+        {1, access::Permission::SystemBackup, L"all"}, {1, access::Permission::SystemRestore, L"all"},
+        {1, access::Permission::NotificationsView, L"all"}, {1, access::Permission::ProfileView, L"own"},
+
+        {2, access::Permission::DashboardView, L"all"}, {2, access::Permission::AnalyticsView, L"all"},
+        {2, access::Permission::SalesView, L"all"}, {2, access::Permission::OrdersView, L"all"},
+        {2, access::Permission::InventoryView, L"all"}, {2, access::Permission::CustomersView, L"all"},
+        {2, access::Permission::EmployeesView, L"all"}, {2, access::Permission::ReportsView, L"all"},
+        {2, access::Permission::ReportsGenerate, L"all"}, {2, access::Permission::ReportsExportPdf, L"all"},
+        {2, access::Permission::ReportsExportExcel, L"all"}, {2, access::Permission::AuditView, L"all"},
+        {2, access::Permission::NotificationsView, L"all"}, {2, access::Permission::ProfileView, L"own"},
+
+        {3, access::Permission::DashboardView, L"team"}, {3, access::Permission::SalesView, L"team"},
+        {3, access::Permission::SalesCreate, L"team"}, {3, access::Permission::SalesEdit, L"team"},
+        {3, access::Permission::OrdersView, L"team"}, {3, access::Permission::OrdersCreate, L"team"},
+        {3, access::Permission::OrdersEdit, L"team"}, {3, access::Permission::OrdersChangeStatus, L"team"},
+        {3, access::Permission::CustomersView, L"team"}, {3, access::Permission::CustomersCreate, L"team"},
+        {3, access::Permission::CustomersEdit, L"team"}, {3, access::Permission::InventoryView, L"all"},
+        {3, access::Permission::EmployeesView, L"team"}, {3, access::Permission::ReportsView, L"team"},
+        {3, access::Permission::ReportsGenerate, L"team"}, {3, access::Permission::ManageTasks, L"team"},
+        {3, access::Permission::NotificationsView, L"team"}, {3, access::Permission::ProfileView, L"own"},
+
+        {4, access::Permission::DashboardView, L"own"}, {4, access::Permission::SalesView, L"own"},
+        {4, access::Permission::SalesCreate, L"own"}, {4, access::Permission::SalesEdit, L"own"},
+        {4, access::Permission::OrdersView, L"own"}, {4, access::Permission::OrdersCreate, L"own"},
+        {4, access::Permission::OrdersEdit, L"own"}, {4, access::Permission::OrdersChangeStatus, L"own"},
+        {4, access::Permission::CustomersView, L"own"}, {4, access::Permission::CustomersCreate, L"own"},
+        {4, access::Permission::CustomersEdit, L"own"}, {4, access::Permission::InventoryView, L"all"},
+        {4, access::Permission::ReportsView, L"own"}, {4, access::Permission::NotificationsView, L"own"},
+        {4, access::Permission::ProfileView, L"own"},
+
+        {5, access::Permission::DashboardView, L"all"}, {5, access::Permission::InventoryView, L"all"},
+        {5, access::Permission::InventoryCreate, L"all"}, {5, access::Permission::InventoryEdit, L"all"},
+        {5, access::Permission::InventoryDelete, L"all"}, {5, access::Permission::InventoryStockIn, L"all"},
+        {5, access::Permission::InventoryStockOut, L"all"}, {5, access::Permission::InventoryExport, L"all"},
+        {5, access::Permission::ReportsView, L"all"}, {5, access::Permission::NotificationsView, L"all"},
+        {5, access::Permission::ProfileView, L"own"},
+
+        {6, access::Permission::DashboardView, L"own"}, {6, access::Permission::SalesView, L"own"},
+        {6, access::Permission::SalesCreate, L"own"}, {6, access::Permission::OrdersView, L"own"},
+        {6, access::Permission::CustomersView, L"own"}, {6, access::Permission::CustomersCreate, L"own"},
+        {6, access::Permission::NotificationsView, L"own"}, {6, access::Permission::ProfileView, L"own"},
+
+        {7, access::Permission::DashboardView, L"all"}, {7, access::Permission::InventoryView, L"all"},
+        {7, access::Permission::InventoryCreate, L"all"}, {7, access::Permission::InventoryEdit, L"all"},
+        {7, access::Permission::InventoryStockIn, L"all"}, {7, access::Permission::InventoryStockOut, L"all"},
+        {7, access::Permission::OrdersView, L"all"}, {7, access::Permission::OrdersChangeStatus, L"all"},
+        {7, access::Permission::NotificationsView, L"all"}, {7, access::Permission::ProfileView, L"own"},
+
+        {8, access::Permission::DashboardView, L"all"}, {8, access::Permission::AnalyticsView, L"all"},
+        {8, access::Permission::SalesView, L"all"}, {8, access::Permission::OrdersView, L"all"},
+        {8, access::Permission::ReportsView, L"all"}, {8, access::Permission::ReportsGenerate, L"all"},
+        {8, access::Permission::ReportsExportPdf, L"all"}, {8, access::Permission::ReportsExportExcel, L"all"},
+        {8, access::Permission::NotificationsView, L"own"}, {8, access::Permission::ProfileView, L"own"},
+
+        {9, access::Permission::DashboardView, L"all"}, {9, access::Permission::AnalyticsView, L"all"},
+        {9, access::Permission::SalesView, L"all"}, {9, access::Permission::OrdersView, L"all"},
+        {9, access::Permission::InventoryView, L"all"}, {9, access::Permission::CustomersView, L"all"},
+        {9, access::Permission::ReportsView, L"all"}, {9, access::Permission::NotificationsView, L"own"},
+        {9, access::Permission::ProfileView, L"own"}
     };
     for (const auto& permission : permissions) {
         sql << "INSERT OR IGNORE INTO role_permissions(role_id, permission, scope) VALUES("
-            << permission.roleId << "," << QuoteSql(permission.permission) << "," << QuoteSql(permission.scope) << ");";
+            << permission.roleId << "," << QuoteSql(access::PermissionCode(permission.permission)) << "," << QuoteSql(permission.scope) << ");";
     }
+    for (const auto permission : access::AllPermissions()) {
+        sql << "INSERT OR IGNORE INTO role_permissions(role_id, permission, scope) VALUES(10,"
+            << QuoteSql(access::PermissionCode(permission)) << "," << QuoteSql(L"all") << ");";
+    }
+    sql << "UPDATE users SET role_id = (SELECT id FROM roles WHERE lower(roles.name) = lower(users.role) LIMIT 1) WHERE role_id IS NULL;";
 
     return db_.Execute(sql.str(), &lastError_);
 }
 
 bool Repository::EnsureDefaultAdminAccount() {
-    if (db_.QueryScalarInt("SELECT COUNT(*) FROM users;", 0) > 0) {
+    if (db_.QueryScalarInt("SELECT COUNT(*) FROM users WHERE lower(username) = lower('admin');", 0) > 0) {
         return true;
     }
 
+    const int nextId = db_.QueryScalarInt("SELECT COALESCE(MAX(id), 0) + 1 FROM users;", 1);
     SqliteStatement insert;
     if (!db_.Prepare(
-            "INSERT INTO users(id, full_name, username, email, role, password_hash, status, last_login, created_at) "
-            "VALUES(1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+            "INSERT INTO users(id, full_name, username, email, role, role_id, password_hash, status, last_login, created_at) "
+            "VALUES(?1, ?2, ?3, ?4, ?5, (SELECT id FROM roles WHERE lower(name) = lower(?5) LIMIT 1), ?6, ?7, ?8, ?9);",
             &insert,
             &lastError_)) {
         return false;
     }
-    insert.BindText(1, L"SalesFlow Administrator");
-    insert.BindText(2, L"admin");
-    insert.BindText(3, L"admin@salesflow.local");
-    insert.BindText(4, L"System Administrator");
-    insert.BindText(5, DemoPasswordHash(L"demo123"));
-    insert.BindText(6, L"Active");
-    insert.BindText(7, L"Never");
-    insert.BindText(8, CurrentDateIso());
+    insert.BindInt(1, nextId);
+    insert.BindText(2, L"SalesFlow Administrator");
+    insert.BindText(3, L"admin");
+    insert.BindText(4, L"admin@salesflow.local");
+    insert.BindText(5, L"System Administrator");
+    insert.BindText(6, DemoPasswordHash(L"demo123"));
+    insert.BindText(7, L"Active");
+    insert.BindText(8, L"Never");
+    insert.BindText(9, CurrentDateIso());
     if (insert.Step() != SQLITE_DONE) {
         SetLastError(L"Unable to create default administrator account.");
         return false;
@@ -3862,12 +6384,12 @@ bool Repository::EnsureDemoAccountPasswords() {
     std::ostringstream sql;
     sql << "BEGIN IMMEDIATE;";
     for (const auto& user : kUsers) {
-        sql << "INSERT OR IGNORE INTO users(id, full_name, username, email, role, password_hash, status, last_login, created_at) VALUES("
-            << user.id << ","
+        sql << "INSERT OR IGNORE INTO users(full_name, username, email, role, role_id, password_hash, status, last_login, created_at) VALUES("
             << QuoteSql(user.fullName) << ","
             << QuoteSql(user.username) << ","
             << QuoteSql(user.email) << ","
             << QuoteSql(user.role) << ","
+            << "(SELECT id FROM roles WHERE lower(name) = lower(" << QuoteSql(user.role) << ") LIMIT 1),"
             << QuoteSql(DemoPasswordHash(L"demo123")) << ","
             << QuoteSql(L"Active") << ","
             << QuoteSql(user.lastLogin) << ","
@@ -3876,6 +6398,7 @@ bool Repository::EnsureDemoAccountPasswords() {
             << "full_name = " << QuoteSql(user.fullName) << ", "
             << "email = " << QuoteSql(user.email) << ", "
             << "role = " << QuoteSql(user.role) << ", "
+            << "role_id = (SELECT id FROM roles WHERE lower(name) = lower(" << QuoteSql(user.role) << ") LIMIT 1), "
             << "password_hash = " << QuoteSql(DemoPasswordHash(L"demo123")) << ", "
             << "status = " << QuoteSql(L"Active")
             << " WHERE lower(username) = lower(" << QuoteSql(user.username) << ");";
@@ -3889,7 +6412,11 @@ bool Repository::EnsureDemoAccountPasswords() {
         << QuoteSql(L"m.ivanova") << ","
         << QuoteSql(L"d.belov") << ","
         << QuoteSql(L"e.kozlova") << ","
-        << QuoteSql(L"v.morozov") << ");";
+        << QuoteSql(L"v.morozov") << ","
+        << QuoteSql(L"n.orlov") << ","
+        << QuoteSql(L"o.sidorova") << ","
+        << QuoteSql(L"t.akhmedov") << ","
+        << QuoteSql(L"a.volkova") << ");";
     sql << "COMMIT;";
     return db_.Execute(sql.str(), &lastError_);
 }
@@ -3988,11 +6515,12 @@ bool Repository::LogAudit(const std::wstring& entityType, int entityId, const st
     const std::wstring userName = hasCurrentAccount_
         ? (currentAccount_.username.empty() ? currentAccount_.fullName : currentAccount_.username)
         : L"system";
+    const std::wstring severity = AuditSeverityFor(entityType, action);
 
     SqliteStatement insert;
     if (!db_.Prepare(
-            "INSERT INTO audit_log(id, entity_type, entity_id, action, user_name, details, created_at) "
-            "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7);",
+            "INSERT INTO audit_log(id, entity_type, entity_id, action, user_name, details, created_at, severity) "
+            "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
             &insert,
             nullptr)) {
         return false;
@@ -4004,6 +6532,7 @@ bool Repository::LogAudit(const std::wstring& entityType, int entityId, const st
     insert.BindText(5, userName);
     insert.BindText(6, details);
     insert.BindText(7, CurrentTimestamp());
+    insert.BindText(8, severity);
     return insert.Step() == SQLITE_DONE;
 }
 

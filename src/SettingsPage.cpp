@@ -123,7 +123,12 @@ void DrawLabel(HDC hdc, const RECT& field, const std::wstring& text) {
 }
 
 bool CanManageAccounts() {
-    return access::HasPermission(data::Repository::Instance().CurrentAccount(), access::Permission::ManageUsers);
+    const auto account = data::Repository::Instance().CurrentAccount();
+    return access::HasPermission(account, access::Permission::UsersView)
+        || access::HasPermission(account, access::Permission::UsersCreate)
+        || access::HasPermission(account, access::Permission::UsersEdit)
+        || access::HasPermission(account, access::Permission::UsersDisable)
+        || access::HasPermission(account, access::Permission::RolesEdit);
 }
 
 bool Can(access::Permission permission) {
@@ -163,17 +168,17 @@ void SettingsPage::OnCreate() {
     dbUsersEdit_ = ui::CreateUiEdit(hwnd_, IDC_DB_USERS, L"");
     dbOrdersEdit_ = ui::CreateUiEdit(hwnd_, IDC_DB_ORDERS, L"");
 
-    testButton_ = ui::CreateUiButton(hwnd_, IDC_TEST, L"\u2699", ui::ButtonKind::Secondary);
-    saveButton_ = ui::CreateUiButton(hwnd_, IDC_SAVE, L"\u2713", ui::ButtonKind::Primary);
-    resetButton_ = ui::CreateUiButton(hwnd_, IDC_RESET, L"\u2715", ui::ButtonKind::Danger);
-    addAccountButton_ = ui::CreateUiButton(hwnd_, IDC_ADD_ACCOUNT, L"+", ui::ButtonKind::Primary);
-    toggleAccountButton_ = ui::CreateUiButton(hwnd_, IDC_TOGGLE_ACCOUNT, L"\u25C9", ui::ButtonKind::Secondary);
-    resetPasswordButton_ = ui::CreateUiButton(hwnd_, IDC_RESET_PASSWORD, L"*", ui::ButtonKind::Secondary);
-    roleAccountButton_ = ui::CreateUiButton(hwnd_, IDC_ROLE_ACCOUNT, L"\u25C6", ui::ButtonKind::Secondary);
-    deleteAccountButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE_ACCOUNT, L"\u2715", ui::ButtonKind::Danger);
+    testButton_ = ui::CreateUiButton(hwnd_, IDC_TEST, L"Test DB", ui::ButtonKind::Secondary);
+    saveButton_ = ui::CreateUiButton(hwnd_, IDC_SAVE, L"Save Settings", ui::ButtonKind::Primary);
+    resetButton_ = ui::CreateUiButton(hwnd_, IDC_RESET, L"Clear Data", ui::ButtonKind::Danger);
+    addAccountButton_ = ui::CreateUiButton(hwnd_, IDC_ADD_ACCOUNT, L"Add User", ui::ButtonKind::Primary);
+    toggleAccountButton_ = ui::CreateUiButton(hwnd_, IDC_TOGGLE_ACCOUNT, L"Edit User", ui::ButtonKind::Secondary);
+    resetPasswordButton_ = ui::CreateUiButton(hwnd_, IDC_RESET_PASSWORD, L"Reset Password", ui::ButtonKind::Secondary);
+    roleAccountButton_ = ui::CreateUiButton(hwnd_, IDC_ROLE_ACCOUNT, L"Change Role", ui::ButtonKind::Secondary);
+    deleteAccountButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE_ACCOUNT, L"Delete User", ui::ButtonKind::Danger);
 
     accountsTable_ = ui::CreateUiListView(hwnd_, IDC_ACCOUNTS);
-    ui::AddListColumns(accountsTable_, {UiText(L"Name", L"Имя"), UiText(L"Username", L"Логин"), UiText(L"Role", L"Роль"), UiText(L"Status", L"Статус"), UiText(L"Last Login", L"Последний вход"), UiText(L"Created", L"Создано")}, {190, 130, 170, 110, 140, 110});
+    ui::AddListColumns(accountsTable_, {UiText(L"Name", L"Имя"), UiText(L"Username", L"Логин"), UiText(L"Role", L"Роль"), UiText(L"Status", L"Статус"), UiText(L"Last Login", L"Последний вход"), UiText(L"Created", L"Создано")}, {220, 150, 190, 120, 170, 150});
 
     ui::AddComboItems(themeCombo_, {L"Corporate Light", L"Slate Contrast", L"Presentation Mode"});
     ui::AddComboItems(languageCombo_, {L"English", L"Russian", L"German"});
@@ -194,17 +199,15 @@ void SettingsPage::OnActivate() {
 }
 
 void SettingsPage::ApplyAccess() {
-    const bool settings = Can(access::Permission::ManageSystemSettings);
-    const bool users = Can(access::Permission::ManageUsers);
-    const bool roles = Can(access::Permission::ManageRoles);
+    const bool settings = Can(access::Permission::SettingsEdit);
     SetActionVisible(testButton_, settings);
     SetActionVisible(saveButton_, settings);
     SetActionVisible(resetButton_, Can(access::Permission::ClearBusinessData));
-    SetActionVisible(addAccountButton_, users);
-    SetActionVisible(toggleAccountButton_, users);
-    SetActionVisible(resetPasswordButton_, users);
-    SetActionVisible(roleAccountButton_, roles);
-    SetActionVisible(deleteAccountButton_, users);
+    SetActionVisible(addAccountButton_, Can(access::Permission::UsersCreate));
+    SetActionVisible(toggleAccountButton_, Can(access::Permission::UsersDisable));
+    SetActionVisible(resetPasswordButton_, Can(access::Permission::UsersEdit));
+    SetActionVisible(roleAccountButton_, Can(access::Permission::RolesEdit));
+    SetActionVisible(deleteAccountButton_, Can(access::Permission::UsersDelete));
     EnableWindow(themeCombo_, settings ? TRUE : FALSE);
     EnableWindow(languageCombo_, settings ? TRUE : FALSE);
     EnableWindow(dateCombo_, settings ? TRUE : FALSE);
@@ -247,6 +250,7 @@ void SettingsPage::FillAccounts() {
             account.createdAt
         });
     }
+    ShowWindow(accountsTable_, accounts_.empty() ? SW_HIDE : SW_SHOW);
 }
 
 int SettingsPage::SelectedAccountIndex() const {
@@ -277,6 +281,20 @@ void SettingsPage::OnSize(int width, int height) {
     ui::MoveWindowToRect(roleAccountButton_, layout.roleAccount);
     ui::MoveWindowToRect(deleteAccountButton_, layout.deleteAccount);
     ui::MoveWindowToRect(accountsTable_, layout.accountsTable);
+
+    const int tableWidth = std::max(ui::Scale(720), ui::Width(layout.accountsTable) - ui::Scale(4));
+    const int nameWidth = tableWidth * 24 / 100;
+    const int usernameWidth = tableWidth * 14 / 100;
+    const int roleWidth = tableWidth * 18 / 100;
+    const int statusWidth = tableWidth * 12 / 100;
+    const int loginWidth = tableWidth * 18 / 100;
+    const int createdWidth = std::max(ui::Scale(130), tableWidth - nameWidth - usernameWidth - roleWidth - statusWidth - loginWidth);
+    ListView_SetColumnWidth(accountsTable_, 0, nameWidth);
+    ListView_SetColumnWidth(accountsTable_, 1, usernameWidth);
+    ListView_SetColumnWidth(accountsTable_, 2, roleWidth);
+    ListView_SetColumnWidth(accountsTable_, 3, statusWidth);
+    ListView_SetColumnWidth(accountsTable_, 4, loginWidth);
+    ListView_SetColumnWidth(accountsTable_, 5, createdWidth);
 }
 
 void SettingsPage::OnPaint(HDC hdc, const RECT& client) {
@@ -287,10 +305,10 @@ void SettingsPage::OnPaint(HDC hdc, const RECT& client) {
                L"Настройки собраны в более аккуратное рабочее пространство вместе с диагностикой базы и управлением аккаунтами."),
         ui::Width(layout.title));
 
-    ui::DrawKpiCard(hdc, layout.kpis[0], UiText(L"Database Engine", L"Движок БД"), overview_.engineVersion.empty() ? UiText(L"Offline", L"Оффлайн") : overview_.engineVersion, overview_.connected ? UiText(L"Local SQLite runtime available", L"Локальный SQLite доступен") : UiText(L"Database not initialized", L"База не инициализирована"), theme::kBlue);
-    ui::DrawKpiCard(hdc, layout.kpis[1], UiText(L"User Accounts", L"Учётные записи"), std::to_wstring(overview_.usersCount), UiText(L"Role-based access seeded into SQL", L"Ролевой доступ загружен в SQL"), theme::kGreen);
-    ui::DrawKpiCard(hdc, layout.kpis[2], UiText(L"Orders Stored", L"Заказов в базе"), std::to_wstring(overview_.ordersCount), UiText(L"Current SQL order rows", L"Текущие строки заказов в SQL"), theme::kAmber);
-    ui::DrawKpiCard(hdc, layout.kpis[3], UiText(L"Last Seed", L"Последняя инициализация"), overview_.lastSeededAt.empty() ? UiText(L"N/A", L"Н/Д") : overview_.lastSeededAt.substr(0, 10), UiText(L"Demo data refresh timestamp", L"Время обновления демо-данных"), theme::kAccent);
+    ui::DrawKpiCard(hdc, layout.kpis[0], UiText(L"Database Engine", L"Движок БД"), overview_.engineVersion.empty() ? UiText(L"Offline", L"Оффлайн") : overview_.engineVersion, overview_.connected ? UiText(L"Database engine available", L"Движок базы доступен") : UiText(L"Database not initialized", L"База не инициализирована"), theme::kBlue);
+    ui::DrawKpiCard(hdc, layout.kpis[1], UiText(L"User Accounts", L"Учётные записи"), std::to_wstring(overview_.usersCount), UiText(L"User access configured", L"Доступ пользователей настроен"), theme::kGreen);
+    ui::DrawKpiCard(hdc, layout.kpis[2], UiText(L"Orders Stored", L"Заказов в базе"), std::to_wstring(overview_.ordersCount), UiText(L"Stored orders", L"Сохранённые заказы"), theme::kAmber);
+    ui::DrawKpiCard(hdc, layout.kpis[3], UiText(L"Last Seed", L"Последняя инициализация"), overview_.lastSeededAt.empty() ? UiText(L"N/A", L"Н/Д") : overview_.lastSeededAt.substr(0, 10), UiText(L"Last demo refresh", L"Последнее обновление демо"), theme::kAccent);
 
     ui::DrawRoundedPanel(hdc, layout.prefsPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawRoundedPanel(hdc, layout.dbPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
@@ -314,6 +332,10 @@ void SettingsPage::OnPaint(HDC hdc, const RECT& client) {
     DrawLabel(hdc, layout.dbEngine, UiText(L"Engine Version", L"Версия движка"));
     DrawLabel(hdc, layout.dbUsers, UiText(L"User Count", L"Количество пользователей"));
     DrawLabel(hdc, layout.dbOrders, UiText(L"Orders Count", L"Количество заказов"));
+    if (accounts_.empty()) {
+        ui::DrawEmptyState(hdc, layout.accountsTable, UiText(L"No user accounts", L"Учётных записей нет"),
+            UiText(L"Add users to configure role-based access.", L"Добавьте пользователей для настройки ролевого доступа."), L"\u25CF");
+    }
 }
 
 LRESULT SettingsPage::OnCommand(WPARAM wParam, LPARAM) {

@@ -10,13 +10,16 @@ The project is a sales monitoring system with demo data, role-based access, anal
 - shows a dashboard with revenue, orders, products, and client metrics
 - provides pages for sales, orders, products, clients, employees, analytics, reports, and settings
 - stores demo and working data in SQLite
-- supports login and registration
-- supports role-based access for administrator, director, head of sales, sales manager, and product manager
+- supports login with seeded demo accounts
+- supports role-based access for system administrator, director, head of sales, sales manager, cashier, product manager, warehouse worker, accountant, and analyst
 - exports reports and CSV files to `bin/Release/exports/`
 
 ### Default Login
 
 Use one of the demo accounts below:
+
+- username: `admin`
+- password: `demo123`
 
 - username: `a.petrova`
 - password: `demo123`
@@ -172,13 +175,16 @@ SalesFlow — это нативное Windows-приложение, написа
 - показывает dashboard с метриками по выручке, заказам, товарам и клиентам
 - содержит страницы продаж, заказов, товаров, клиентов, сотрудников, аналитики, отчётов и настроек
 - хранит рабочие и демо-данные в SQLite
-- поддерживает вход и регистрацию
-- поддерживает роли: администратор, директор, руководитель отдела продаж, менеджер по продажам и менеджер по товарам
+- поддерживает вход через подготовленные демо-аккаунты
+- поддерживает роли: системный администратор, директор, руководитель отдела продаж, менеджер по продажам, кассир, менеджер по товарам, складской сотрудник, бухгалтер и аналитик
 - экспортирует отчёты и CSV-файлы в `bin/Release/exports/`
 
 ### Данные Для Входа
 
 Можно использовать один из демо-аккаунтов:
+
+- логин: `admin`
+- пароль: `demo123`
 
 - логин: `a.petrova`
 - пароль: `demo123`

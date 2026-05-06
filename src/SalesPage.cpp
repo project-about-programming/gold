@@ -2,10 +2,12 @@
 
 #include "AccessControl.h"
 #include "DataRepository.h"
+#include "DataEntryDialog.h"
 #include "Localization.h"
 #include "Theme.h"
 #include "UiHelpers.h"
 
+#include <algorithm>
 #include <numeric>
 #include <sstream>
 
@@ -47,18 +49,18 @@ SalesLayout BuildLayout(const RECT& client) {
         layout.kpis[i] = kpis[i];
     }
 
-    layout.filterPanel = ui::TakeTop(&area, ui::Scale(126), m.sectionGap);
+    layout.filterPanel = ui::TakeTop(&area, ui::Scale(140), m.sectionGap);
     layout.tablePanel = area;
 
-    RECT filterInner = ui::Inset(layout.filterPanel, ui::Scale(14), ui::Scale(12));
-    RECT filterRow = ui::MakeRect(filterInner.left, layout.filterPanel.top + ui::Scale(38), filterInner.right, layout.filterPanel.top + ui::Scale(38) + m.controlHeight);
-    layout.channel = ui::TakeRight(&filterRow, ui::Scale(138), m.compactGap);
-    layout.status = ui::TakeRight(&filterRow, ui::Scale(138), m.compactGap);
-    layout.to = ui::TakeRight(&filterRow, ui::Scale(126), m.compactGap);
-    layout.from = ui::TakeRight(&filterRow, ui::Scale(126), m.compactGap);
+    RECT filterInner = ui::Inset(layout.filterPanel, ui::Scale(16), ui::Scale(14));
+    RECT filterRow = ui::MakeRect(filterInner.left, layout.filterPanel.top + ui::Scale(44), filterInner.right, layout.filterPanel.top + ui::Scale(44) + m.controlHeight);
+    layout.channel = ui::TakeRight(&filterRow, ui::Scale(154), m.compactGap);
+    layout.status = ui::TakeRight(&filterRow, ui::Scale(154), m.compactGap);
+    layout.to = ui::TakeRight(&filterRow, ui::Scale(150), m.compactGap);
+    layout.from = ui::TakeRight(&filterRow, ui::Scale(150), m.compactGap);
     layout.search = filterRow;
 
-    RECT actionRow = ui::MakeRect(filterInner.left, layout.search.bottom + ui::Scale(12), filterInner.right, layout.search.bottom + ui::Scale(12) + m.buttonHeight);
+    RECT actionRow = ui::MakeRect(filterInner.left, layout.search.bottom + ui::Scale(14), filterInner.right, layout.search.bottom + ui::Scale(14) + ui::Scale(36));
     const int actionWidth = ui::IconButtonWidth();
     layout.exportButton = ui::TakeRight(&actionRow, actionWidth, m.compactGap);
     layout.refresh = ui::TakeRight(&actionRow, actionWidth, m.compactGap);
@@ -66,7 +68,7 @@ SalesLayout BuildLayout(const RECT& client) {
     layout.statusAction = ui::TakeRight(&actionRow, actionWidth, m.compactGap);
     layout.add = ui::TakeRight(&actionRow, actionWidth, m.compactGap);
 
-    layout.table = ui::Inset(ui::MakeRect(layout.tablePanel.left, layout.tablePanel.top + m.panelHeaderHeight, layout.tablePanel.right, layout.tablePanel.bottom), ui::Scale(12), ui::Scale(12));
+    layout.table = ui::Inset(ui::MakeRect(layout.tablePanel.left, layout.tablePanel.top + m.panelHeaderHeight, layout.tablePanel.right, layout.tablePanel.bottom - ui::Scale(32)), ui::Scale(12), ui::Scale(12));
     return layout;
 }
 
@@ -98,9 +100,86 @@ void SetActionVisible(HWND hwnd, bool visible) {
     EnableWindow(hwnd, visible ? TRUE : FALSE);
 }
 
+int ParseIntText(const std::wstring& value, int fallback = 0) {
+    try {
+        return std::stoi(value);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+ui::DataEntryField ComboField(const std::wstring& label, const std::vector<ui::DataEntryOption>& options,
+    const std::wstring& value = L"", bool required = true, bool storeId = true) {
+    ui::DataEntryField field{label, L"", value, required};
+    field.kind = ui::DataEntryFieldKind::Combo;
+    field.options = options;
+    field.storeOptionId = storeId;
+    field.allowCustomValue = false;
+    return field;
+}
+
+ui::DataEntryField NumberField(const std::wstring& label, const std::wstring& placeholder, const std::wstring& value, double minValue = 0.0) {
+    ui::DataEntryField field{label, placeholder, value, true};
+    field.kind = ui::DataEntryFieldKind::Number;
+    field.minValue = minValue;
+    field.hasMinValue = true;
+    return field;
+}
+
+ui::DataEntryField DecimalField(const std::wstring& label, const std::wstring& placeholder, const std::wstring& value, double minValue, double maxValue, bool hasMax, bool required = false) {
+    ui::DataEntryField field{label, placeholder, value, required};
+    field.kind = ui::DataEntryFieldKind::Decimal;
+    field.minValue = minValue;
+    field.hasMinValue = true;
+    field.maxValue = maxValue;
+    field.hasMaxValue = hasMax;
+    return field;
+}
+
+std::vector<ui::DataEntryOption> CustomerOptions(const std::vector<data::ClientRecord>& clients) {
+    std::vector<ui::DataEntryOption> options;
+    for (const auto& client : clients) {
+        std::wstring text = client.company;
+        if (!client.phone.empty() || !client.email.empty()) {
+            text += L" | " + (!client.phone.empty() ? client.phone : client.email);
+        }
+        options.push_back({client.id, text});
+    }
+    return options;
+}
+
+std::vector<ui::DataEntryOption> ProductOptions(const std::vector<data::ProductRecord>& products) {
+    std::vector<ui::DataEntryOption> options;
+    for (const auto& product : products) {
+        std::wostringstream text;
+        text << product.sku << L" | " << product.name << L" | Stock: " << product.stock << L" | $" << static_cast<long long>(product.price + 0.5);
+        options.push_back({product.id, text.str()});
+    }
+    return options;
+}
+
+std::vector<ui::DataEntryOption> PaymentMethodOptions() {
+    return {
+        {0, L"Cash"},
+        {0, L"Card"},
+        {0, L"Bank Transfer"},
+        {0, L"Online"},
+        {0, L"Mixed"}
+    };
+}
+
+const data::ProductRecord* FindProduct(const std::vector<data::ProductRecord>& products, int id) {
+    for (const auto& product : products) {
+        if (product.id == id) {
+            return &product;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
-SalesPage::SalesPage() : PageBase(L"Sales Monitoring", L"Sales transactions, performance summaries, and filterable SQL-backed commercial data.") {}
+SalesPage::SalesPage() : PageBase(L"Sales Monitoring", L"Sales transactions, revenue summaries and customer activity.") {}
 
 const wchar_t* SalesPage::ClassName() const { return L"NativeSalesPage"; }
 
@@ -110,18 +189,18 @@ void SalesPage::OnCreate() {
     toDate_ = ui::CreateUiDatePicker(hwnd_, IDC_TO);
     statusCombo_ = ui::CreateUiCombo(hwnd_, IDC_STATUS);
     channelCombo_ = ui::CreateUiCombo(hwnd_, IDC_CHANNEL);
-    addButton_ = ui::CreateUiButton(hwnd_, IDC_ADD, L"+", ui::ButtonKind::Primary);
-    statusButton_ = ui::CreateUiButton(hwnd_, IDC_STATUS_ACTION, L"\u2713", ui::ButtonKind::Secondary);
-    deleteButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE, L"\u2715", ui::ButtonKind::Danger);
-    refreshButton_ = ui::CreateUiButton(hwnd_, IDC_REFRESH, L"\u21BB", ui::ButtonKind::Secondary);
-    exportButton_ = ui::CreateUiButton(hwnd_, IDC_EXPORT, L"\u21E9", ui::ButtonKind::Primary);
+    addButton_ = ui::CreateUiButton(hwnd_, IDC_ADD, L"New Sale", ui::ButtonKind::Primary);
+    statusButton_ = ui::CreateUiButton(hwnd_, IDC_STATUS_ACTION, L"Change Status", ui::ButtonKind::Secondary);
+    deleteButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE, L"Delete", ui::ButtonKind::Danger);
+    refreshButton_ = ui::CreateUiButton(hwnd_, IDC_REFRESH, L"Refresh", ui::ButtonKind::Secondary);
+    exportButton_ = ui::CreateUiButton(hwnd_, IDC_EXPORT, L"Export CSV", ui::ButtonKind::Primary);
     salesTable_ = ui::CreateUiListView(hwnd_, IDC_TABLE);
 
     ui::SetEditCueBanner(searchEdit_, UiText(L"Search by sale id, manager, client, or product", L"Поиск по продаже, менеджеру, клиенту или товару"));
     ui::AddComboItems(statusCombo_, {L"All Statuses", L"Completed", L"Pending", L"Returned", L"Cancelled"});
-    ui::AddComboItems(channelCombo_, {L"All Channels", L"Direct", L"Online", L"Partner"});
-    ui::AddListColumns(salesTable_, {UiText(L"Sale ID", L"Продажа"), UiText(L"Manager", L"Менеджер"), UiText(L"Client", L"Клиент"), UiText(L"Product", L"Товар"), UiText(L"Qty", L"Кол-во"), UiText(L"Payment", L"Оплата"), UiText(L"Revenue", L"Выручка"), UiText(L"Margin", L"Маржа"), UiText(L"Date", L"Дата"), UiText(L"Status", L"Статус")},
-        {100, 140, 170, 180, 58, 110, 100, 90, 110, 100});
+    ui::AddComboItems(channelCombo_, {L"All Channels", L"Cash", L"Card", L"Bank Transfer", L"Online", L"Mixed"});
+    ui::AddListColumns(salesTable_, {UiText(L"Sale ID", L"Продажа"), UiText(L"Manager", L"Менеджер"), UiText(L"Client", L"Клиент"), UiText(L"Product", L"Товар"), UiText(L"Qty", L"Кол-во"), UiText(L"Payment", L"Оплата"), UiText(L"Revenue", L"Выручка"), UiText(L"Margin", L"Маржа"), UiText(L"Date", L"Дата"), UiText(L"Status", L"Статус"), UiText(L"Actions", L"Действия")},
+        {92, 130, 160, 180, 58, 104, 104, 86, 130, 112, 104});
     DateTime_SetSystemtime(fromDate_, GDT_NONE, nullptr);
     DateTime_SetSystemtime(toDate_, GDT_NONE, nullptr);
 
@@ -172,9 +251,11 @@ void SalesPage::ReloadData() {
             FormatMoney(row.revenue),
             FormatPercent(row.marginPercent),
             row.dateDisplay,
-            i18n::DataText(row.status)
+            i18n::DataText(row.status),
+            UiText(L"View / Edit", L"Просмотр / правка")
         });
     }
+    ShowWindow(salesTable_, sales_.empty() ? SW_HIDE : SW_SHOW);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -191,6 +272,31 @@ void SalesPage::OnSize(int width, int height) {
     ui::MoveWindowToRect(refreshButton_, layout.refresh);
     ui::MoveWindowToRect(exportButton_, layout.exportButton);
     ui::MoveWindowToRect(salesTable_, layout.table);
+
+    const int tableWidth = std::max(ui::Scale(980), ui::Width(layout.table) - ui::Scale(4));
+    const int actionsWidth = ui::Scale(108);
+    const int available = std::max(ui::Scale(760), tableWidth - actionsWidth);
+    int widths[11]{
+        std::max(ui::Scale(78), available * 7 / 100),
+        std::max(ui::Scale(112), available * 10 / 100),
+        std::max(ui::Scale(142), available * 13 / 100),
+        std::max(ui::Scale(160), available * 15 / 100),
+        std::max(ui::Scale(54), available * 5 / 100),
+        std::max(ui::Scale(92), available * 8 / 100),
+        std::max(ui::Scale(104), available * 9 / 100),
+        std::max(ui::Scale(82), available * 7 / 100),
+        std::max(ui::Scale(132), available * 12 / 100),
+        std::max(ui::Scale(116), available * 9 / 100),
+        actionsWidth
+    };
+    int used = 0;
+    for (int i = 0; i < 10; ++i) {
+        used += widths[i];
+    }
+    widths[10] = std::max(actionsWidth, tableWidth - used);
+    for (int i = 0; i < 11; ++i) {
+        ListView_SetColumnWidth(salesTable_, i, widths[i]);
+    }
 }
 
 void SalesPage::OnPaint(HDC hdc, const RECT& client) {
@@ -207,18 +313,15 @@ void SalesPage::OnPaint(HDC hdc, const RECT& client) {
     if (!sales_.empty()) {
         avgMargin /= static_cast<double>(sales_.size());
     }
-    const double completionRate = sales_.empty() ? 0.0 : (completedDeals * 100.0 / static_cast<double>(sales_.size()));
-
     ui::FillRectColor(hdc, client, theme::kWindowBackground);
-    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Sales Register", L"Реестр продаж"),
-        UiText(L"A denser, filterable transaction workspace with consistent controls and a live SQL-backed data grid.",
-               L"Плотный рабочий экран с фильтрами, едиными контролами и живой SQL-таблицей."),
+    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Sales", L"Продажи"),
+        UiText(L"Create and monitor completed sales transactions.", L"Создание и контроль завершённых продаж."),
         ui::Width(layout.title));
 
-    ui::DrawKpiCard(hdc, layout.kpis[0], UiText(L"Filtered Revenue", L"Выручка по фильтру"), FormatMoney(totalRevenue), UiText(L"Current result set", L"Текущий набор результатов"), theme::kBlue);
-    ui::DrawKpiCard(hdc, layout.kpis[1], UiText(L"Average Ticket", L"Средний чек"), FormatMoney(avgTicket), UiText(L"Across active query rows", L"По активным строкам выборки"), theme::kGreen);
-    ui::DrawKpiCard(hdc, layout.kpis[2], UiText(L"Completed Deals", L"Закрытые сделки"), std::to_wstring(completedDeals), FormatPercent(completionRate) + UiText(L" completion rate", L" уровень завершения"), theme::kAmber);
-    ui::DrawKpiCard(hdc, layout.kpis[3], UiText(L"Average Margin", L"Средняя маржа"), FormatPercent(avgMargin), std::to_wstring(sales_.size()) + UiText(L" rows loaded", L" строк загружено"), theme::kAccent);
+    ui::DrawKpiCard(hdc, layout.kpis[0], UiText(L"Filtered Revenue", L"Выручка по фильтру"), FormatMoney(totalRevenue), UiText(L"Revenue from selected filters", L"Выручка по выбранным фильтрам"), theme::kBlue);
+    ui::DrawKpiCard(hdc, layout.kpis[1], UiText(L"Average Ticket", L"Средний чек"), FormatMoney(avgTicket), UiText(L"Average value per sale", L"Средняя сумма одной продажи"), theme::kGreen);
+    ui::DrawKpiCard(hdc, layout.kpis[2], UiText(L"Completed Deals", L"Закрытые сделки"), std::to_wstring(completedDeals), UiText(L"Completed sales ratio", L"Доля завершённых продаж"), theme::kAmber);
+    ui::DrawKpiCard(hdc, layout.kpis[3], UiText(L"Average Margin", L"Средняя маржа"), FormatPercent(avgMargin), UiText(L"Based on selected period", L"На основе выбранного периода"), theme::kAccent);
 
     ui::DrawRoundedPanel(hdc, layout.filterPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     DrawFilterLabel(hdc, layout.search, UiText(L"Search", L"Поиск"));
@@ -229,12 +332,19 @@ void SalesPage::OnPaint(HDC hdc, const RECT& client) {
 
     ui::DrawRoundedPanel(hdc, layout.tablePanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawSectionTitle(hdc, layout.tablePanel.left + ui::Scale(16), layout.tablePanel.top + ui::Scale(14), UiText(L"Sales Transactions", L"Транзакции продаж"),
-        UiText(L"Search, status, date, and channel filters are aligned into one consistent toolbar system.",
-               L"Поиск, статус, даты и каналы выровнены в единую панель фильтров."),
+        UiText(L"Filtered sales records with payment, revenue and status details.",
+               L"Отфильтрованные продажи с оплатой, выручкой и статусами."),
         ui::Width(layout.tablePanel) - ui::Scale(32));
-    ui::DrawTextLine(hdc, UiText(L"Result rows: ", L"Строк найдено: ") + std::to_wstring(sales_.size()),
-        ui::MakeRect(layout.tablePanel.right - ui::Scale(220), layout.tablePanel.top + ui::Scale(20), layout.tablePanel.right - ui::Scale(18), layout.tablePanel.top + ui::Scale(40)),
+    const std::wstring footer = sales_.size() == 1
+        ? UiText(L"Showing 1 transaction", L"Показана 1 транзакция")
+        : UiText(L"Showing ", L"Показано транзакций: ") + std::to_wstring(sales_.size()) + UiText(L" transactions", L"");
+    ui::DrawTextLine(hdc, footer,
+        ui::MakeRect(layout.tablePanel.right - ui::Scale(280), layout.tablePanel.bottom - ui::Scale(30), layout.tablePanel.right - ui::Scale(18), layout.tablePanel.bottom - ui::Scale(10)),
         theme::SmallBoldFont(), theme::kTextSecondary, DT_RIGHT | DT_SINGLELINE);
+    if (sales_.empty()) {
+        ui::DrawEmptyState(hdc, layout.table, UiText(L"No sales recorded yet", L"Продаж пока нет"),
+            UiText(L"Completed sales will appear here.", L"Завершённые продажи появятся здесь."), L"$");
+    }
 }
 
 LRESULT SalesPage::OnCommand(WPARAM wParam, LPARAM) {
@@ -242,7 +352,35 @@ LRESULT SalesPage::OnCommand(WPARAM wParam, LPARAM) {
     const int code = HIWORD(wParam);
 
     if (id == IDC_ADD && code == BN_CLICKED) {
-        if (!data::Repository::Instance().AddDemoSale()) {
+        data::ClientFilter clientFilter{};
+        const auto clients = data::Repository::Instance().LoadClients(clientFilter);
+        data::ProductFilter productFilter{};
+        const auto products = data::Repository::Instance().LoadProducts(productFilter);
+        std::vector<ui::DataEntryField> fields{
+            ComboField(UiText(L"Customer", L"Customer"), CustomerOptions(clients)),
+            ComboField(UiText(L"Product", L"Product"), ProductOptions(products)),
+            NumberField(UiText(L"Quantity", L"Quantity"), UiText(L"Example: 2", L"Example: 2"), L"", 1),
+            DecimalField(UiText(L"Discount %", L"Discount %"), UiText(L"Optional, 0-100", L"Optional, 0-100"), L"0", 0, 100, true),
+            ComboField(UiText(L"Payment Method", L"Payment Method"), PaymentMethodOptions(), L"Card", false, false),
+            DecimalField(UiText(L"Payment Amount", L"Payment Amount"), UiText(L"Leave empty to mark as fully paid", L"Leave empty to mark as fully paid"), L"", 0, 0, false, false)
+        };
+        if (!ui::ShowDataEntryDialog(hwnd_, UiText(L"New Sale", L"New Sale"),
+                UiText(L"Create a completed sale and deduct inventory immediately.", L"Create a completed sale and deduct inventory immediately."),
+                fields)) {
+            return 0;
+        }
+        const int productId = ParseIntText(fields[1].value, 0);
+        const int quantity = ParseIntText(fields[2].value, 0);
+        const data::ProductRecord* selectedProduct = FindProduct(products, productId);
+        if (selectedProduct && selectedProduct->stock <= 0) {
+            MessageBoxW(hwnd_, L"Selected product is out of stock.", UiText(L"New Sale", L"New Sale").c_str(), MB_OK | MB_ICONWARNING);
+            return 0;
+        }
+        if (selectedProduct && quantity > selectedProduct->stock) {
+            MessageBoxW(hwnd_, L"Quantity cannot exceed available stock.", UiText(L"New Sale", L"New Sale").c_str(), MB_OK | MB_ICONWARNING);
+            return 0;
+        }
+        if (!data::Repository::Instance().CreateDirectSale(fields[0].value, fields[1].value, fields[2].value, fields[3].value, fields[4].value, fields[5].value)) {
             MessageBoxW(hwnd_, data::Repository::Instance().LastError().c_str(), UiText(L"Add Sale", L"Add Sale").c_str(), MB_OK | MB_ICONWARNING);
         }
         ReloadData();

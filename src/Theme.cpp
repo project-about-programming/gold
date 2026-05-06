@@ -1,9 +1,9 @@
 #include "Theme.h"
 
 namespace theme {
-COLORREF kWindowBackground = RGB(243, 247, 252);
-COLORREF kSidebarBackground = RGB(17, 26, 42);
-COLORREF kSidebarSurface = RGB(28, 42, 64);
+COLORREF kWindowBackground = RGB(244, 247, 251);
+COLORREF kSidebarBackground = RGB(15, 23, 42);
+COLORREF kSidebarSurface = RGB(30, 41, 59);
 COLORREF kPanelBackground = RGB(255, 255, 255);
 COLORREF kPanelMuted = RGB(248, 251, 255);
 COLORREF kPanelBorder = RGB(219, 228, 240);
@@ -11,7 +11,7 @@ COLORREF kPanelBorderStrong = RGB(197, 211, 231);
 COLORREF kHeaderBackground = RGB(253, 255, 255);
 COLORREF kTextPrimary = RGB(24, 36, 56);
 COLORREF kTextSecondary = RGB(96, 111, 133);
-COLORREF kAccent = RGB(31, 107, 214);
+COLORREF kAccent = RGB(37, 99, 235);
 COLORREF kAccentSoft = RGB(226, 239, 255);
 COLORREF kSuccessSoft = RGB(229, 247, 240);
 COLORREF kWarningSoft = RGB(255, 245, 226);
@@ -45,9 +45,9 @@ HFONT CreateUiFont(int size, int weight) {
 }
 
 void ApplyCorporateLight() {
-    kWindowBackground = RGB(243, 247, 252);
-    kSidebarBackground = RGB(17, 26, 42);
-    kSidebarSurface = RGB(28, 42, 64);
+    kWindowBackground = RGB(244, 247, 251);
+    kSidebarBackground = RGB(15, 23, 42);
+    kSidebarSurface = RGB(30, 41, 59);
     kPanelBackground = RGB(255, 255, 255);
     kPanelMuted = RGB(248, 251, 255);
     kPanelBorder = RGB(219, 228, 240);
@@ -55,7 +55,7 @@ void ApplyCorporateLight() {
     kHeaderBackground = RGB(253, 255, 255);
     kTextPrimary = RGB(24, 36, 56);
     kTextSecondary = RGB(96, 111, 133);
-    kAccent = RGB(31, 107, 214);
+    kAccent = RGB(37, 99, 235);
     kAccentSoft = RGB(226, 239, 255);
     kSuccessSoft = RGB(229, 247, 240);
     kWarningSoft = RGB(255, 245, 226);

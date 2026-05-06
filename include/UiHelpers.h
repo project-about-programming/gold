@@ -12,6 +12,8 @@ enum class ButtonKind {
     Navigation,
     Primary,
     Secondary,
+    Success,
+    Warning,
     Danger
 };
 
@@ -48,6 +50,8 @@ void FillRectColor(HDC hdc, const RECT& rc, COLORREF color);
 void DrawRoundedPanel(HDC hdc, const RECT& rc, COLORREF fill, COLORREF border, int radius = 18, bool shadow = true);
 void DrawTextLine(HDC hdc, const std::wstring& text, RECT rc, HFONT font, COLORREF color, UINT format);
 void DrawSectionTitle(HDC hdc, int x, int y, const std::wstring& title, const std::wstring& subtitle, int width);
+void DrawPanelHeader(HDC hdc, const RECT& panel, const std::wstring& title, const std::wstring& subtitle);
+void DrawEmptyState(HDC hdc, const RECT& rc, const std::wstring& title, const std::wstring& description, const std::wstring& icon = L"\u25A1");
 void DrawKpiCard(HDC hdc, const RECT& rc, const std::wstring& title, const std::wstring& value, const std::wstring& caption, COLORREF accent);
 void DrawLineChartPanel(HDC hdc, const RECT& rc, const std::wstring& title, const std::wstring& subtitle,
                         const std::vector<SeriesPoint>& points, COLORREF lineColor, double minValue, double maxValue,
@@ -64,6 +68,7 @@ HWND CreateUiEdit(HWND parent, int id, const std::wstring& text = L"");
 HWND CreateUiCombo(HWND parent, int id);
 HWND CreateUiDatePicker(HWND parent, int id);
 HWND CreateUiListView(HWND parent, int id);
+void ApplyStandardTableStyle(HWND list);
 void ApplyControlFont(HWND hwnd, HFONT font);
 void AssignFontRole(HWND hwnd, FontRole role);
 void RefreshWindowFonts(HWND root);
@@ -72,9 +77,12 @@ void AddComboItems(HWND combo, const std::vector<std::wstring>& items);
 void AddListColumns(HWND list, const std::vector<std::wstring>& titles, const std::vector<int>& widths);
 void AddListRow(HWND list, int rowIndex, const std::vector<std::wstring>& values);
 void ClearListRows(HWND list);
+void ClearListSelection(HWND list);
 void MoveWindowToRect(HWND hwnd, const RECT& rc, BOOL repaint = TRUE);
 void SetButtonKind(HWND hwnd, ButtonKind kind);
 ButtonKind GetButtonKind(HWND hwnd);
+void SetButtonIconIndex(HWND hwnd, int iconIndex);
+int GetButtonIconIndex(HWND hwnd);
 bool TryGetDatePickerIso(HWND picker, std::wstring* value);
 LRESULT HandleListViewCustomDraw(LPARAM lParam);
 

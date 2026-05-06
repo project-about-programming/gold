@@ -57,31 +57,46 @@ struct SalesRecord {
 struct OrderFilter {
     std::wstring search;
     std::wstring status;
+    std::wstring paymentStatus;
     std::wstring fromDateIso;
     std::wstring toDateIso;
+    std::wstring customer;
 };
 
 struct OrderRecord {
     int id{};
+    int customerId{};
+    int productId{};
     std::wstring orderCode;
     std::wstring client;
     std::wstring product;
     int quantity{};
+    int itemsCount{};
     double totalPrice{};
+    double discountPercent{};
+    double paymentAmount{};
     std::wstring dateIso;
     std::wstring dateDisplay;
     std::wstring status;
+    std::wstring paymentStatus;
+    std::wstring paymentMethod;
+    std::wstring owner;
     std::wstring priority;
+    std::wstring notes;
 };
 
 struct ProductFilter {
     std::wstring search;
     std::wstring category;
+    std::wstring supplier;
     std::wstring status;
+    std::wstring expiryStatus;
 };
 
 struct ProductRecord {
     int id{};
+    int categoryId{};
+    int supplierId{};
     std::wstring sku;
     std::wstring name;
     std::wstring category;
@@ -97,6 +112,61 @@ struct ProductRecord {
     std::wstring expirationDateIso;
     std::wstring expirationDateDisplay;
     std::wstring batchCode;
+    std::wstring description;
+};
+
+struct CategoryRecord {
+    int id{};
+    std::wstring name;
+    std::wstring description;
+    std::wstring status;
+};
+
+struct SupplierRecord {
+    int id{};
+    std::wstring name;
+    std::wstring contactName;
+    std::wstring phone;
+    std::wstring email;
+    std::wstring address;
+    std::wstring status;
+};
+
+struct InventorySummary {
+    int catalogItems{};
+    int lowStock{};
+    int outOfStock{};
+    int activeItems{};
+    int expiringSoon{};
+    double stockValue{};
+};
+
+struct StockMovementRecord {
+    int id{};
+    int productId{};
+    std::wstring createdAt;
+    std::wstring sku;
+    std::wstring product;
+    std::wstring movementType;
+    int quantity{};
+    int previousQuantity{};
+    int newQuantity{};
+    std::wstring reason;
+    std::wstring reference;
+    std::wstring userName;
+};
+
+struct InventoryAlertRecord {
+    int id{};
+    int productId{};
+    std::wstring sku;
+    std::wstring product;
+    std::wstring alertType;
+    std::wstring message;
+    std::wstring severity;
+    std::wstring status;
+    std::wstring createdAt;
+    std::wstring resolvedAt;
 };
 
 struct ClientFilter {
@@ -185,7 +255,16 @@ struct AuditRecord {
     std::wstring action;
     std::wstring userName;
     std::wstring details;
+    std::wstring severity;
     std::wstring createdAt;
+};
+
+struct RoleSummaryRecord {
+    int id{};
+    std::wstring name;
+    std::wstring description;
+    std::wstring defaultStartPage;
+    int permissionCount{};
 };
 
 struct DatabaseOverview {

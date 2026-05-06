@@ -4,13 +4,16 @@
 #include <uxtheme.h>
 
 #include <algorithm>
+#include <cwctype>
 #include <iomanip>
+#include <initializer_list>
 #include <sstream>
 
 namespace ui {
 namespace {
 const wchar_t* kButtonKindProp = L"UiButtonKind";
 const wchar_t* kFontRoleProp = L"UiFontRole";
+const wchar_t* kIconIndexProp = L"UiIconIndex";
 
 HFONT ResolveFont(FontRole role) {
     switch (role) {
@@ -133,6 +136,126 @@ void DrawNavIcon(HDC hdc, RECT rc, int index, COLORREF color) {
 bool HasUsableSize(const RECT& rc, int minSize = 4) {
     return (rc.right - rc.left) >= Scale(minSize) && (rc.bottom - rc.top) >= Scale(minSize);
 }
+
+bool HasClassName(HWND hwnd, const wchar_t* className) {
+    wchar_t buffer[64]{};
+    GetClassNameW(hwnd, buffer, 64);
+    return std::wstring(buffer) == className;
+}
+
+std::wstring LowerCopy(std::wstring text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](wchar_t ch) {
+        return static_cast<wchar_t>(std::towlower(ch));
+    });
+    return text;
+}
+
+bool ContainsAny(const std::wstring& text, std::initializer_list<const wchar_t*> needles) {
+    const std::wstring lower = LowerCopy(text);
+    for (const wchar_t* needle : needles) {
+        if (lower.find(LowerCopy(needle)) != std::wstring::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+UINT ColumnFormatForTitle(const std::wstring& title) {
+    if (ContainsAny(title, {
+            L"qty", L"units", L"revenue", L"margin", L"price", L"total", L"amount", L"cost", L"stock",
+            L"reorder", L"discount", L"ltv", L"spent", L"sales", L"value", L"conversion",
+            L"кол", L"ед", L"выруч", L"марж", L"цен", L"сум", L"стоим", L"остат", L"порог", L"скид",
+            L"продаж", L"конверс", L"доход"
+        })) {
+        return LVCFMT_RIGHT;
+    }
+    if (ContainsAny(title, { L"status", L"severity", L"priority", L"role", L"статус", L"важность", L"приоритет", L"роль" })) {
+        return LVCFMT_CENTER;
+    }
+    return LVCFMT_LEFT;
+}
+
+bool MatchesAny(const std::wstring& text, std::initializer_list<const wchar_t*> values) {
+    const std::wstring lower = LowerCopy(text);
+    for (const wchar_t* value : values) {
+        if (lower == LowerCopy(value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsPositiveStatus(const std::wstring& text) {
+    return MatchesAny(text, {
+        L"Active", L"OK", L"Delivered", L"Completed", L"Paid", L"In Stock", L"Stock In", L"Resolved",
+        L"Активен", L"Доставлено", L"Завершено", L"Оплачено", L"В наличии",
+        L"Aktiv", L"Geliefert", L"Abgeschlossen"
+    });
+}
+
+bool IsWarningStatus(const std::wstring& text) {
+    return MatchesAny(text, {
+        L"Pending", L"Warning", L"Low Stock", L"Partial", L"High", L"Medium", L"Stock Out", L"Open",
+        L"В ожидании", L"Предупреждение", L"Мало на складе", L"Частично", L"Высокий", L"Средний",
+        L"Ausstehend", L"Warnung", L"Niedriger Bestand"
+    });
+}
+
+bool IsInfoStatus(const std::wstring& text) {
+    return MatchesAny(text, {
+        L"Processing", L"Confirmed", L"Packed", L"Info",
+        L"В обработке", L"Подтверждено", L"Упаковано", L"Инфо",
+        L"In Bearbeitung", L"Bestätigt", L"Verpackt"
+    });
+}
+
+bool IsNeutralStatus(const std::wstring& text) {
+    return MatchesAny(text, {
+        L"Refunded", L"Returned", L"Suspended", L"Disabled",
+        L"Возвращено", L"Возврат", L"Приостановлен", L"Отключён", L"Отключен"
+    });
+}
+
+bool IsDangerStatus(const std::wstring& text) {
+    return MatchesAny(text, {
+        L"Critical", L"Expired", L"Discontinued", L"Cancelled", L"Canceled", L"Out of Stock", L"Blocked", L"Failed",
+        L"Критично", L"Истёк", L"Истек", L"Снят с продажи", L"Отменено", L"Нет на складе", L"Заблокирован", L"Ошибка",
+        L"Kritisch"
+    });
+}
+
+bool IsBadgeText(const std::wstring& text) {
+    return IsPositiveStatus(text) || IsWarningStatus(text) || IsInfoStatus(text) || IsNeutralStatus(text) || IsDangerStatus(text);
+}
+
+LRESULT HandleHeaderCustomDraw(LPARAM lParam) {
+    auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(lParam);
+    switch (draw->dwDrawStage) {
+    case CDDS_PREPAINT:
+        return CDRF_NOTIFYITEMDRAW;
+    case CDDS_ITEMPREPAINT: {
+        RECT rc = draw->rc;
+        FillRectColor(draw->hdc, rc, RGB(241, 245, 249));
+        RECT line{ rc.left, rc.bottom - 1, rc.right, rc.bottom };
+        FillRectColor(draw->hdc, line, RGB(226, 232, 240));
+
+        wchar_t text[160]{};
+        HDITEMW item{};
+        item.mask = HDI_TEXT;
+        item.pszText = text;
+        item.cchTextMax = static_cast<int>(sizeof(text) / sizeof(text[0]));
+        Header_GetItem(draw->hdr.hwndFrom, static_cast<int>(draw->dwItemSpec), &item);
+
+        rc.left += Scale(10);
+        rc.right -= Scale(8);
+        DrawTextLine(draw->hdc, text, rc, theme::SmallBoldFont(), RGB(51, 65, 85),
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        return CDRF_SKIPDEFAULT;
+    }
+    default:
+        return CDRF_DODEFAULT;
+    }
+}
 }
 
 void EnableDoubleBuffering(HWND hwnd) {
@@ -153,15 +276,15 @@ const Metrics& GetMetrics() {
     metrics.compactGap = Scale(12);
     metrics.controlHeight = Scale(36);
     metrics.buttonHeight = Scale(40);
-    metrics.panelHeaderHeight = Scale(48);
+    metrics.panelHeaderHeight = Scale(64);
     metrics.kpiHeight = Scale(132);
-    metrics.titleBlockHeight = Scale(42);
+    metrics.titleBlockHeight = Scale(64);
     metrics.radius = Scale(16);
     return metrics;
 }
 
 int IconButtonWidth() {
-    return Scale(44);
+    return Scale(124);
 }
 
 void FillRectColor(HDC hdc, const RECT& rc, COLORREF color) {
@@ -207,16 +330,44 @@ void DrawTextLine(HDC hdc, const std::wstring& text, RECT rc, HFONT font, COLORR
     HGDIOBJ oldFont = SelectObject(hdc, font);
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, color);
-    DrawTextW(hdc, text.c_str(), -1, &rc, format);
+    DrawTextW(hdc, text.c_str(), -1, &rc, format | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
 }
 
-void DrawSectionTitle(HDC hdc, int x, int y, const std::wstring& title, const std::wstring&, int width) {
+void DrawSectionTitle(HDC hdc, int x, int y, const std::wstring& title, const std::wstring& subtitle, int width) {
     if (width <= Scale(24)) {
         return;
     }
     RECT titleRc{ x, y, x + width, y + Scale(28) };
-    DrawTextLine(hdc, title, titleRc, theme::BodyBoldFont(), theme::kTextPrimary, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    DrawTextLine(hdc, title, titleRc, theme::BodyBoldFont(), theme::kTextPrimary, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    if (!subtitle.empty()) {
+        RECT subtitleRc{ x, y + Scale(29), x + width, y + Scale(52) };
+        DrawTextLine(hdc, subtitle, subtitleRc, theme::SmallFont(), theme::kTextSecondary, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    }
+}
+
+void DrawPanelHeader(HDC hdc, const RECT& panel, const std::wstring& title, const std::wstring& subtitle) {
+    DrawSectionTitle(hdc, panel.left + Scale(18), panel.top + Scale(14), title, subtitle, Width(panel) - Scale(36));
+}
+
+void DrawEmptyState(HDC hdc, const RECT& rc, const std::wstring& title, const std::wstring& description, const std::wstring& icon) {
+    if (!HasUsableSize(rc, 60)) {
+        return;
+    }
+    const int boxWidth = std::min(Scale(420), std::max(Scale(220), Width(rc) - Scale(40)));
+    const int boxHeight = Scale(118);
+    RECT box{
+        rc.left + (Width(rc) - boxWidth) / 2,
+        rc.top + (Height(rc) - boxHeight) / 2,
+        rc.left + (Width(rc) + boxWidth) / 2,
+        rc.top + (Height(rc) + boxHeight) / 2
+    };
+    DrawTextLine(hdc, icon, MakeRect(box.left, box.top, box.right, box.top + Scale(32)),
+        theme::BodyBoldFont(), RGB(148, 163, 184), DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    DrawTextLine(hdc, title, MakeRect(box.left, box.top + Scale(42), box.right, box.top + Scale(68)),
+        theme::BodyBoldFont(), RGB(51, 65, 85), DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    DrawTextLine(hdc, description, MakeRect(box.left, box.top + Scale(74), box.right, box.bottom),
+        theme::SmallFont(), RGB(100, 116, 139), DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS);
 }
 
 void DrawKpiCard(HDC hdc, const RECT& rc, const std::wstring& title, const std::wstring& value, const std::wstring& caption, COLORREF accent) {
@@ -228,9 +379,9 @@ void DrawKpiCard(HDC hdc, const RECT& rc, const std::wstring& title, const std::
     FillRectColor(hdc, topBar, accent);
     RECT titleRc{ rc.left + Scale(18), rc.top + Scale(28), rc.right - Scale(18), rc.top + Scale(54) };
     DrawTextLine(hdc, title, titleRc, theme::SmallBoldFont(), theme::kTextSecondary, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    RECT valueRc{ rc.left + Scale(18), rc.top + Scale(54), rc.right - Scale(18), rc.top + Scale(96) };
+    RECT valueRc{ rc.left + Scale(18), rc.top + Scale(54), rc.right - Scale(18), rc.top + Scale(84) };
     DrawTextLine(hdc, value, valueRc, theme::KpiValueFont(), theme::kTextPrimary, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    RECT captionRc{ rc.left + Scale(18), rc.bottom - Scale(38), rc.right - Scale(18), rc.bottom - Scale(12) };
+    RECT captionRc{ rc.left + Scale(18), rc.top + Scale(92), rc.right - Scale(18), rc.bottom - Scale(12) };
     DrawTextLine(hdc, caption, captionRc, theme::SmallFont(), accent, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 }
 
@@ -368,53 +519,71 @@ void DrawUiButton(const DRAWITEMSTRUCT* dis, ButtonKind kind, bool active) {
     int radius = 12;
 
     if (kind == ButtonKind::Navigation) {
-        fill = active ? theme::kSidebarSurface : (hovered ? RGB(23, 36, 56) : theme::kSidebarBackground);
-        border = active ? theme::kAccent : RGB(37, 52, 78);
-        text = active ? RGB(255, 255, 255) : RGB(227, 233, 241);
-        radius = 14;
+        fill = active ? RGB(30, 41, 59) : (hovered ? RGB(23, 32, 51) : theme::kSidebarBackground);
+        border = fill;
+        text = disabled ? RGB(100, 116, 139) : ((active || hovered) ? RGB(255, 255, 255) : RGB(203, 213, 225));
+        radius = Scale(6);
     } else if (kind == ButtonKind::Secondary) {
-        fill = pressed ? RGB(235, 240, 247) : (hovered ? RGB(243, 246, 250) : theme::kPanelMuted);
-        border = hovered ? theme::kAccent : theme::kPanelBorderStrong;
-        text = theme::kTextPrimary;
+        fill = pressed ? RGB(241, 245, 249) : (hovered ? RGB(248, 250, 252) : RGB(255, 255, 255));
+        border = RGB(203, 213, 225);
+        text = RGB(51, 65, 85);
     } else if (kind == ButtonKind::Primary) {
         fill = pressed ? RGB(24, 90, 186) : (hovered ? RGB(29, 101, 202) : theme::kAccent);
         border = fill;
         text = RGB(255, 255, 255);
+    } else if (kind == ButtonKind::Success) {
+        fill = pressed ? RGB(18, 126, 72) : (hovered ? RGB(20, 143, 82) : RGB(22, 163, 74));
+        border = fill;
+        text = RGB(255, 255, 255);
+    } else if (kind == ButtonKind::Warning) {
+        fill = pressed ? RGB(180, 83, 9) : (hovered ? RGB(202, 96, 12) : RGB(217, 119, 6));
+        border = fill;
+        text = RGB(255, 255, 255);
     } else if (kind == ButtonKind::Danger) {
-        fill = pressed ? RGB(246, 225, 222) : (hovered ? RGB(249, 233, 230) : RGB(251, 241, 239));
-        border = RGB(232, 200, 195);
-        text = theme::kDanger;
+        fill = pressed ? RGB(254, 226, 226) : (hovered ? RGB(254, 235, 235) : RGB(254, 242, 242));
+        border = RGB(254, 202, 202);
+        text = RGB(220, 38, 38);
     }
 
     if (disabled) {
-        fill = RGB(242, 244, 247);
-        border = RGB(223, 228, 235);
-        text = RGB(148, 156, 169);
+        if (kind == ButtonKind::Navigation) {
+            fill = theme::kSidebarBackground;
+            border = fill;
+            text = RGB(100, 116, 139);
+        } else {
+            fill = RGB(242, 244, 247);
+            border = RGB(223, 228, 235);
+            text = RGB(148, 156, 169);
+        }
     }
 
-    DrawRoundedPanel(hdc, rc, fill, border, radius, false);
+    if (kind == ButtonKind::Navigation && !active && !hovered && !disabled) {
+        FillRectColor(hdc, rc, theme::kSidebarBackground);
+    } else {
+        DrawRoundedPanel(hdc, rc, fill, border, radius, false);
+    }
 
     if (kind == ButtonKind::Navigation && active) {
-        RECT accent{ rc.left + Scale(10), rc.top + Scale(9), rc.left + Scale(14), rc.bottom - Scale(9) };
-        FillRectColor(hdc, accent, theme::kAccentSoft);
+        RECT accent{ rc.left, rc.top + Scale(6), rc.left + Scale(4), rc.bottom - Scale(6) };
+        FillRectColor(hdc, accent, RGB(59, 130, 246));
     }
 
     wchar_t textBuffer[128]{};
     GetWindowTextW(dis->hwndItem, textBuffer, 128);
     RECT textRc = rc;
     if (kind == ButtonKind::Navigation) {
-        RECT iconRc{ rc.left + Scale(24), rc.top + Scale(12), rc.left + Scale(44), rc.bottom - Scale(12) };
-        DrawNavIcon(hdc, iconRc, GetDlgCtrlID(dis->hwndItem) - 1000, text);
-        textRc.left += Scale(56);
+        const int iconSize = Scale(20);
+        const int iconTop = rc.top + std::max(0, (Height(rc) - iconSize) / 2);
+        RECT iconRc{ rc.left + Scale(18), iconTop, rc.left + Scale(18) + iconSize, iconTop + iconSize };
+        DrawNavIcon(hdc, iconRc, GetButtonIconIndex(dis->hwndItem), active ? RGB(96, 165, 250) : text);
+        textRc.left += Scale(50);
+        textRc.right -= Scale(10);
         DrawTextLine(hdc, textBuffer, textRc, theme::NavFont(), text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     } else {
         DrawTextLine(hdc, textBuffer, textRc, theme::SmallBoldFont(), text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
-    if ((dis->itemState & ODS_FOCUS) != 0) {
-        RECT focusRc = Inset(rc, Scale(4), Scale(4));
-        DrawFocusRect(hdc, &focusRc);
-    }
+    // Owner-drawn buttons use their visual state instead of the legacy dotted focus rectangle.
 }
 
 HWND CreateUiButton(HWND parent, int id, const std::wstring& text, ButtonKind kind) {
@@ -446,18 +615,30 @@ HWND CreateUiDatePicker(HWND parent, int id) {
     HWND h = CreateWindowExW(0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | WS_BORDER | DTS_SHORTDATEFORMAT | DTS_SHOWNONE,
                              0, 0, 120, 32, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
     SetWindowTheme(h, L"Explorer", nullptr);
+    DateTime_SetFormat(h, L"dd MMM yyyy");
     AssignFontRole(h, FontRole::Body);
     return h;
 }
 
+void ApplyStandardTableStyle(HWND list) {
+    if (!list) {
+        return;
+    }
+    ListView_SetExtendedListViewStyle(list, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP | LVS_EX_INFOTIP);
+    ListView_SetBkColor(list, RGB(255, 255, 255));
+    ListView_SetTextBkColor(list, RGB(255, 255, 255));
+    ListView_SetTextColor(list, RGB(15, 23, 42));
+    SetWindowTheme(list, L"ItemsView", nullptr);
+    ListView_SetItemState(list, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+    InvalidateRect(list, nullptr, TRUE);
+}
+
 HWND CreateUiListView(HWND parent, int id) {
-    HWND h = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+    HWND h = CreateWindowExW(0, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | LVS_REPORT | LVS_SINGLESEL,
                              0, 0, 100, 100, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
-    ListView_SetExtendedListViewStyle(h, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP | LVS_EX_INFOTIP);
-    ListView_SetBkColor(h, theme::kPanelBackground);
-    ListView_SetTextBkColor(h, theme::kPanelBackground);
-    ListView_SetTextColor(h, theme::kTextPrimary);
-    SetWindowTheme(h, L"ItemsView", nullptr);
+    HIMAGELIST rowHeight = ImageList_Create(1, Scale(40), ILC_COLOR32, 1, 1);
+    ListView_SetImageList(h, rowHeight, LVSIL_SMALL);
+    ApplyStandardTableStyle(h);
     AssignFontRole(h, FontRole::Body);
     return h;
 }
@@ -488,7 +669,7 @@ void AddListColumns(HWND list, const std::vector<std::wstring>& titles, const st
     for (size_t i = 0; i < titles.size(); ++i) {
         LVCOLUMNW col{};
         col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT;
-        col.fmt = LVCFMT_LEFT;
+        col.fmt = ColumnFormatForTitle(titles[i]);
         col.pszText = const_cast<LPWSTR>(titles[i].c_str());
         col.cx = widths[i];
         ListView_InsertColumn(list, static_cast<int>(i), &col);
@@ -504,10 +685,19 @@ void AddListRow(HWND list, int rowIndex, const std::vector<std::wstring>& values
     for (size_t i = 1; i < values.size(); ++i) {
         ListView_SetItemText(list, rowIndex, static_cast<int>(i), const_cast<LPWSTR>(values[i].c_str()));
     }
+    ListView_SetItemState(list, rowIndex, 0, LVIS_SELECTED | LVIS_FOCUSED);
 }
 
 void ClearListRows(HWND list) {
     ListView_DeleteAllItems(list);
+    ClearListSelection(list);
+}
+
+void ClearListSelection(HWND list) {
+    if (!list) {
+        return;
+    }
+    ListView_SetItemState(list, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
 }
 
 void MoveWindowToRect(HWND hwnd, const RECT& rc, BOOL repaint) {
@@ -525,6 +715,18 @@ void SetButtonKind(HWND hwnd, ButtonKind kind) {
 
 ButtonKind GetButtonKind(HWND hwnd) {
     return static_cast<ButtonKind>(reinterpret_cast<INT_PTR>(GetPropW(hwnd, kButtonKindProp)));
+}
+
+void SetButtonIconIndex(HWND hwnd, int iconIndex) {
+    SetPropW(hwnd, kIconIndexProp, reinterpret_cast<HANDLE>(static_cast<INT_PTR>(iconIndex)));
+}
+
+int GetButtonIconIndex(HWND hwnd) {
+    HANDLE value = GetPropW(hwnd, kIconIndexProp);
+    if (!value) {
+        return GetDlgCtrlID(hwnd) - 1000;
+    }
+    return static_cast<int>(reinterpret_cast<INT_PTR>(value));
 }
 
 bool TryGetDatePickerIso(HWND picker, std::wstring* value) {
@@ -548,6 +750,11 @@ bool TryGetDatePickerIso(HWND picker, std::wstring* value) {
 }
 
 LRESULT HandleListViewCustomDraw(LPARAM lParam) {
+    const auto* header = reinterpret_cast<const NMHDR*>(lParam);
+    if (header && HasClassName(header->hwndFrom, WC_HEADERW)) {
+        return HandleHeaderCustomDraw(lParam);
+    }
+
     auto* draw = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
     switch (draw->nmcd.dwDrawStage) {
     case CDDS_PREPAINT:
@@ -555,11 +762,91 @@ LRESULT HandleListViewCustomDraw(LPARAM lParam) {
     case CDDS_ITEMPREPAINT:
         return CDRF_NOTIFYSUBITEMDRAW;
     case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
-        const bool selected = (draw->nmcd.uItemState & CDIS_SELECTED) != 0;
+        const bool selected = (ListView_GetItemState(draw->nmcd.hdr.hwndFrom,
+            static_cast<int>(draw->nmcd.dwItemSpec), LVIS_SELECTED) & LVIS_SELECTED) != 0;
         const bool hot = (draw->nmcd.uItemState & CDIS_HOT) != 0;
-        draw->clrTextBk = selected ? theme::kTableSelection : ((draw->nmcd.dwItemSpec % 2 == 0) ? theme::kPanelBackground : theme::kTableAlternate);
-        draw->clrText = hot ? theme::kAccent : theme::kTextPrimary;
-        return CDRF_DODEFAULT;
+        const COLORREF rowBg = selected ? RGB(219, 234, 254)
+            : (hot ? RGB(239, 246, 255) : ((draw->nmcd.dwItemSpec % 2 == 0) ? RGB(255, 255, 255) : RGB(248, 250, 252)));
+        draw->clrTextBk = rowBg;
+        draw->clrText = selected ? RGB(15, 23, 42) : RGB(51, 65, 85);
+
+        RECT cell{};
+        if (draw->iSubItem == 0) {
+            if (!ListView_GetItemRect(draw->nmcd.hdr.hwndFrom, static_cast<int>(draw->nmcd.dwItemSpec), &cell, LVIR_BOUNDS)) {
+                return CDRF_DODEFAULT;
+            }
+        } else {
+            if (!ListView_GetSubItemRect(draw->nmcd.hdr.hwndFrom, static_cast<int>(draw->nmcd.dwItemSpec), draw->iSubItem, LVIR_BOUNDS, &cell)) {
+                return CDRF_DODEFAULT;
+            }
+        }
+        const int columnWidth = ListView_GetColumnWidth(draw->nmcd.hdr.hwndFrom, draw->iSubItem);
+        if (columnWidth > 0) {
+            cell.right = std::min(cell.right, cell.left + columnWidth);
+        }
+        if (Width(cell) <= Scale(8)) {
+            return CDRF_SKIPDEFAULT;
+        }
+        FillRectColor(draw->nmcd.hdc, cell, rowBg);
+        RECT bottomLine{ cell.left, cell.bottom - 1, cell.right, cell.bottom };
+        FillRectColor(draw->nmcd.hdc, bottomLine, RGB(226, 232, 240));
+
+        wchar_t cellText[128]{};
+        ListView_GetItemText(draw->nmcd.hdr.hwndFrom, static_cast<int>(draw->nmcd.dwItemSpec), draw->iSubItem, cellText, 128);
+        const std::wstring status = cellText;
+        if (IsBadgeText(status)) {
+            RECT measure{ 0, 0, Width(cell), Scale(24) };
+            HGDIOBJ oldFont = SelectObject(draw->nmcd.hdc, theme::SmallBoldFont());
+            DrawTextW(draw->nmcd.hdc, status.c_str(), -1, &measure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+            SelectObject(draw->nmcd.hdc, oldFont);
+            const int maxBadgeWidth = std::max(Scale(24), Width(cell) - Scale(10));
+            const int minBadgeWidth = std::min(Scale(44), maxBadgeWidth);
+            const int desiredWidth = std::clamp(Width(measure) + Scale(22), minBadgeWidth, maxBadgeWidth);
+            const int cellLeft = static_cast<int>(cell.left);
+            const int cellRight = static_cast<int>(cell.right);
+            int badgeLeft = cellLeft + (Width(cell) - desiredWidth) / 2;
+            badgeLeft = std::max(cellLeft + Scale(5), std::min(badgeLeft, cellRight - desiredWidth - Scale(5)));
+            const int badgeTop = cell.top + std::max(Scale(4), (Height(cell) - Scale(24)) / 2);
+            RECT badge{ badgeLeft, badgeTop, std::min(cellRight - Scale(5), badgeLeft + desiredWidth), badgeTop + Scale(24) };
+            COLORREF fill = RGB(220, 252, 231);
+            COLORREF border = RGB(187, 247, 208);
+            COLORREF text = RGB(22, 101, 52);
+            if (IsWarningStatus(status)) {
+                fill = RGB(254, 243, 199);
+                border = RGB(253, 230, 138);
+                text = RGB(146, 64, 14);
+            } else if (IsInfoStatus(status)) {
+                fill = RGB(219, 234, 254);
+                border = RGB(191, 219, 254);
+                text = RGB(29, 78, 216);
+            } else if (IsNeutralStatus(status)) {
+                fill = RGB(241, 245, 249);
+                border = RGB(203, 213, 225);
+                text = RGB(71, 85, 105);
+            } else if (IsDangerStatus(status)) {
+                fill = RGB(254, 242, 242);
+                border = RGB(254, 202, 202);
+                text = RGB(220, 38, 38);
+            }
+            DrawRoundedPanel(draw->nmcd.hdc, badge, fill, border, Scale(10), false);
+            DrawTextLine(draw->nmcd.hdc, status, badge, theme::SmallBoldFont(), text, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+            return CDRF_SKIPDEFAULT;
+        }
+
+        LVCOLUMNW column{};
+        column.mask = LVCF_FMT;
+        ListView_GetColumn(draw->nmcd.hdr.hwndFrom, draw->iSubItem, &column);
+        RECT textRc{ cell.left + Scale(10), cell.top, cell.right - Scale(10), cell.bottom };
+        UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
+        if ((column.fmt & LVCFMT_JUSTIFYMASK) == LVCFMT_RIGHT) {
+            format |= DT_RIGHT;
+        } else if ((column.fmt & LVCFMT_JUSTIFYMASK) == LVCFMT_CENTER) {
+            format |= DT_CENTER;
+        } else {
+            format |= DT_LEFT;
+        }
+        DrawTextLine(draw->nmcd.hdc, status, textRc, theme::BodyFont(), draw->clrText, format);
+        return CDRF_SKIPDEFAULT;
     }
     default:
         return CDRF_DODEFAULT;

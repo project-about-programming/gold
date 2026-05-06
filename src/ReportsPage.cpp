@@ -104,17 +104,17 @@ ReportsPage::ReportsPage() : PageBase(L"Reporting Center", L"Scheduled reporting
 const wchar_t* ReportsPage::ClassName() const { return L"NativeReportsPage"; }
 
 void ReportsPage::OnCreate() {
-    dailyButton_ = ui::CreateUiButton(hwnd_, IDC_DAILY, L"\u25A3", ui::ButtonKind::Primary);
-    fulfillButton_ = ui::CreateUiButton(hwnd_, IDC_FULFILL, L"\u2713", ui::ButtonKind::Primary);
-    inventoryButton_ = ui::CreateUiButton(hwnd_, IDC_INVENTORY, L"\u21BB", ui::ButtonKind::Primary);
-    employeeButton_ = ui::CreateUiButton(hwnd_, IDC_EMPLOYEE, L"\u25C6", ui::ButtonKind::Primary);
-    clientButton_ = ui::CreateUiButton(hwnd_, IDC_CLIENT, L"\u25CF", ui::ButtonKind::Secondary);
-    profitButton_ = ui::CreateUiButton(hwnd_, IDC_PROFIT, L"$", ui::ButtonKind::Secondary);
-    cancelButton_ = ui::CreateUiButton(hwnd_, IDC_CANCEL, L"!", ui::ButtonKind::Secondary);
-    auditButton_ = ui::CreateUiButton(hwnd_, IDC_AUDIT, L"", ui::ButtonKind::Secondary);
-    csvButton_ = ui::CreateUiButton(hwnd_, IDC_CSV, L"\u21E9", ui::ButtonKind::Primary);
-    pdfButton_ = ui::CreateUiButton(hwnd_, IDC_PDF, L"\u25A1", ui::ButtonKind::Secondary);
-    archiveButton_ = ui::CreateUiButton(hwnd_, IDC_ARCHIVE, L"\u25A4", ui::ButtonKind::Secondary);
+    dailyButton_ = ui::CreateUiButton(hwnd_, IDC_DAILY, L"Generate", ui::ButtonKind::Primary);
+    fulfillButton_ = ui::CreateUiButton(hwnd_, IDC_FULFILL, L"Generate", ui::ButtonKind::Primary);
+    inventoryButton_ = ui::CreateUiButton(hwnd_, IDC_INVENTORY, L"Refresh", ui::ButtonKind::Primary);
+    employeeButton_ = ui::CreateUiButton(hwnd_, IDC_EMPLOYEE, L"Generate", ui::ButtonKind::Primary);
+    clientButton_ = ui::CreateUiButton(hwnd_, IDC_CLIENT, L"Customer", ui::ButtonKind::Secondary);
+    profitButton_ = ui::CreateUiButton(hwnd_, IDC_PROFIT, L"Profit", ui::ButtonKind::Secondary);
+    cancelButton_ = ui::CreateUiButton(hwnd_, IDC_CANCEL, L"Returns", ui::ButtonKind::Secondary);
+    auditButton_ = ui::CreateUiButton(hwnd_, IDC_AUDIT, L"Audit", ui::ButtonKind::Secondary);
+    csvButton_ = ui::CreateUiButton(hwnd_, IDC_CSV, L"Export CSV", ui::ButtonKind::Primary);
+    pdfButton_ = ui::CreateUiButton(hwnd_, IDC_PDF, L"Export PDF", ui::ButtonKind::Secondary);
+    archiveButton_ = ui::CreateUiButton(hwnd_, IDC_ARCHIVE, L"Archive", ui::ButtonKind::Secondary);
     expiryTable_ = ui::CreateUiListView(hwnd_, IDC_EXPIRY_TABLE);
     ui::AddListColumns(expiryTable_,
         {L"SKU", UiText(L"Product", L"Товар"), UiText(L"Category", L"Категория"), UiText(L"Expires", L"Срок"), UiText(L"Days", L"Дни"), UiText(L"Risk", L"Риск"), UiText(L"Supplier", L"Поставщик"), UiText(L"Batch", L"Партия")},
@@ -165,6 +165,9 @@ void ReportsPage::ReloadData() {
             row.batchCode
         });
     }
+    const bool canSeeExpiry = Can(access::Permission::ExportReports) || Can(access::Permission::ImportExportCatalog);
+    ShowWindow(expiryTable_, (!expiryRows_.empty() && canSeeExpiry) ? SW_SHOW : SW_HIDE);
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void ReportsPage::OnSize(int width, int height) {
@@ -186,9 +189,8 @@ void ReportsPage::OnSize(int width, int height) {
 void ReportsPage::OnPaint(HDC hdc, const RECT& client) {
     const ReportsLayout layout = BuildLayout(client);
     ui::FillRectColor(hdc, client, theme::kWindowBackground);
-    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Reporting Center", L"Центр отчётов"),
-        UiText(L"The report center now generates real files: daily, fulfillment, employee, CSV, PDF queue, and archive snapshots.",
-               L"Центр отчётов теперь создаёт реальные файлы: дневные, операционные, по сотрудникам, CSV, PDF-очередь и архивные снимки."),
+    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Reports", L"Отчёты"),
+        UiText(L"Generate business reports and export summaries.", L"Формирование бизнес-отчётов и экспорт сводок."),
         ui::Width(layout.title));
 
     DrawReportCard(hdc, layout.cards[0], UiText(L"Daily Sales Summary", L"Сводка продаж за день"),
@@ -216,6 +218,10 @@ void ReportsPage::OnPaint(HDC hdc, const RECT& client) {
     ui::DrawTextLine(hdc, UiText(L"Rows are sorted by expiration date so critical batches appear first.", L"Строки отсортированы по сроку годности, поэтому критичные партии находятся выше."),
         ui::MakeRect(layout.actionsPanel.left + ui::Scale(18), layout.actionsPanel.top + ui::Scale(70), layout.actionsPanel.right - ui::Scale(320), layout.actionsPanel.top + ui::Scale(94)),
         theme::SmallFont(), theme::kTextSecondary, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+    if (expiryRows_.empty()) {
+        ui::DrawEmptyState(hdc, layout.expiryTable, UiText(L"No expiration risks", L"Рисков срока годности нет"),
+            UiText(L"Products close to expiration will appear here.", L"Товары с близким сроком годности появятся здесь."), L"\u2713");
+    }
 }
 
 LRESULT ReportsPage::OnCommand(WPARAM wParam, LPARAM) {

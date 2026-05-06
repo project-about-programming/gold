@@ -85,6 +85,7 @@ void EmployeesPage::ReloadData() {
             i18n::DataText(row.status)
         });
     }
+    ShowWindow(employeesTable_, employees_.empty() ? SW_HIDE : SW_SHOW);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -122,7 +123,9 @@ void EmployeesPage::OnPaint(HDC hdc, const RECT& client) {
     }
 
     ui::FillRectColor(hdc, client, theme::kWindowBackground);
-    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Employee Performance", L"Эффективность сотрудников"), L"", ui::Width(layout.title));
+    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Employees", L"Сотрудники"),
+        UiText(L"Manage staff accounts, roles and departments.", L"Управление сотрудниками, ролями и отделами."),
+        ui::Width(layout.title));
 
     ui::DrawKpiCard(hdc, layout.kpis[0], UiText(L"Active Managers", L"Активные менеджеры"), std::to_wstring(activeManagers), UiText(L"Loaded from SQL employees table", L"Загружено из таблицы сотрудников"), theme::kBlue);
     ui::DrawKpiCard(hdc, layout.kpis[1], UiText(L"Completed Sales", L"Закрытые продажи"), std::to_wstring(completedSales), UiText(L"Completed sales in SQL", L"Завершённые продажи в SQL"), theme::kGreen);
@@ -133,4 +136,8 @@ void EmployeesPage::OnPaint(HDC hdc, const RECT& client) {
 
     ui::DrawRoundedPanel(hdc, layout.tablePanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawSectionTitle(hdc, layout.tablePanel.left + ui::Scale(16), layout.tablePanel.top + ui::Scale(14), UiText(L"Employees Table", L"Таблица сотрудников"), L"", ui::Width(layout.tablePanel) - ui::Scale(32));
+    if (employees_.empty()) {
+        ui::DrawEmptyState(hdc, layout.table, UiText(L"No employees found", L"Сотрудники не найдены"),
+            UiText(L"Add staff accounts to manage system access.", L"Добавьте сотрудников для управления доступом."), L"\u25CF");
+    }
 }

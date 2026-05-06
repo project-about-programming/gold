@@ -144,11 +144,11 @@ void LoginWindow::OnCreate() {
     SendMessageW(passwordEdit_, EM_SETPASSWORDCHAR, L'*', 0);
     ui::SetEditCueBanner(usernameEdit_, L"Логин или email");
     ui::SetEditCueBanner(passwordEdit_, L"Введите пароль");
-    SetWindowTextW(usernameEdit_, L"a.petrova");
-    SetWindowTextW(passwordEdit_, L"");
+    SetWindowTextW(usernameEdit_, L"superadmin");
+    SetWindowTextW(passwordEdit_, L"demo123");
     SetWindowSubclass(usernameEdit_, EnterToSubmitSubclass, 1, IDC_SUBMIT);
     SetWindowSubclass(passwordEdit_, EnterToSubmitSubclass, 2, IDC_SUBMIT);
-    SetFocus(passwordEdit_);
+    SetFocus(submitButton_);
 }
 
 void LoginWindow::OnSize(int width, int height) {

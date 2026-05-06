@@ -19,6 +19,7 @@ private:
     void ReloadData();
     data::OrderFilter BuildFilter() const;
 
-    HWND searchEdit_{}; HWND statusCombo_{}; HWND fromDate_{}; HWND toDate_{}; HWND addButton_{}; HWND editButton_{}; HWND deleteButton_{}; HWND ordersTable_{};
+    HWND searchEdit_{}; HWND statusCombo_{}; HWND paymentCombo_{}; HWND customerCombo_{}; HWND fromDate_{}; HWND toDate_{};
+    HWND addButton_{}; HWND editButton_{}; HWND advanceButton_{}; HWND cancelButton_{}; HWND deleteButton_{}; HWND refreshButton_{}; HWND exportButton_{}; HWND ordersTable_{};
     std::vector<data::OrderRecord> orders_{};
 };

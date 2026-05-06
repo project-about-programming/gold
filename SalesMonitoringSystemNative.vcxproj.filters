@@ -12,13 +12,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\AccessControl.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\AuditLogPage.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\AppMessages.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\DataEntryDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\Theme.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\UiHelpers.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\UsersRolesPage.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\Localization.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\LoginWindow.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\NotificationsPage.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\PageBase.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="include\ProfilePage.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\MainWindow.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\DashboardPage.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="include\SalesPage.h"><Filter>Header Files</Filter></ClInclude>
@@ -35,13 +39,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\AccessControl.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\AuditLogPage.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\DataEntryDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\main.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\Localization.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\LoginWindow.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\NotificationsPage.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\Theme.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\UiHelpers.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\UsersRolesPage.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\PageBase.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="src\ProfilePage.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\MainWindow.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\DashboardPage.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="src\SalesPage.cpp"><Filter>Source Files</Filter></ClCompile>

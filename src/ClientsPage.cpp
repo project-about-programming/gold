@@ -122,13 +122,13 @@ void ClientsPage::OnCreate() {
     searchEdit_ = ui::CreateUiEdit(hwnd_, IDC_SEARCH);
     segmentCombo_ = ui::CreateUiCombo(hwnd_, IDC_SEGMENT);
     sortCombo_ = ui::CreateUiCombo(hwnd_, IDC_SORT);
-    addButton_ = ui::CreateUiButton(hwnd_, IDC_ADD, L"+", ui::ButtonKind::Primary);
-    editButton_ = ui::CreateUiButton(hwnd_, IDC_EDIT, L"\u270E", ui::ButtonKind::Secondary);
-    deleteButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE, L"\u2715", ui::ButtonKind::Danger);
+    addButton_ = ui::CreateUiButton(hwnd_, IDC_ADD, L"Add Customer", ui::ButtonKind::Primary);
+    editButton_ = ui::CreateUiButton(hwnd_, IDC_EDIT, L"Edit", ui::ButtonKind::Secondary);
+    deleteButton_ = ui::CreateUiButton(hwnd_, IDC_DELETE, L"Delete", ui::ButtonKind::Danger);
     clientsTable_ = ui::CreateUiListView(hwnd_, IDC_CLIENTS);
     historyTable_ = ui::CreateUiListView(hwnd_, IDC_HISTORY);
 
-    ui::SetEditCueBanner(searchEdit_, UiText(L"Search clients by company or contact", L"Поиск клиентов по компании или контакту"));
+    ui::SetEditCueBanner(searchEdit_, UiText(L"Search customers by company or contact", L"Поиск клиентов по компании или контакту"));
     ui::AddComboItems(segmentCombo_, {UiText(L"All Segments", L"Все сегменты"), UiText(L"Key Account", L"Ключевой клиент"), UiText(L"Mid-Market", L"Средний бизнес"), UiText(L"Regional Partner", L"Региональный партнёр")});
     ui::AddComboItems(sortCombo_, {UiText(L"Sort: Company", L"Сортировка: компания"), UiText(L"Sort: Segment", L"Сортировка: сегмент"), UiText(L"Sort: Region", L"Сортировка: регион")});
     ui::AddListColumns(clientsTable_, {UiText(L"Company", L"Компания"), UiText(L"Contact", L"Контакт"), UiText(L"Segment", L"Сегмент"), UiText(L"Region", L"Регион"), UiText(L"Last Order", L"Последний заказ"), L"LTV"}, {180, 140, 120, 130, 110, 100});
@@ -174,6 +174,7 @@ void ClientsPage::ReloadData() {
             FormatMoney(client.lifetimeValue)
         });
     }
+    ShowWindow(clientsTable_, clients_.empty() ? SW_HIDE : SW_SHOW);
     selectedClient_ = clients_.empty() ? -1 : 0;
     if (selectedClient_ >= 0) {
         ListView_SetItemState(clientsTable_, selectedClient_, LVIS_SELECTED, LVIS_SELECTED);
@@ -192,6 +193,7 @@ void ClientsPage::FillHistory() {
         const auto& row = history_[index];
         ui::AddListRow(historyTable_, static_cast<int>(index), {row.orderCode, row.product, row.dateDisplay, FormatMoney(row.amount)});
     }
+    ShowWindow(historyTable_, history_.empty() ? SW_HIDE : SW_SHOW);
 }
 
 void ClientsPage::OnSize(int width, int height) {
@@ -210,7 +212,9 @@ void ClientsPage::OnPaint(HDC hdc, const RECT& client) {
     const ClientsLayout layout = BuildLayout(client);
 
     ui::FillRectColor(hdc, client, theme::kWindowBackground);
-    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Client Registry", L"Реестр клиентов"), L"", ui::Width(layout.title));
+    ui::DrawSectionTitle(hdc, layout.title.left, layout.title.top, UiText(L"Customers", L"Клиенты"),
+        UiText(L"Manage customer profiles and purchase history.", L"Управление клиентами и историей покупок."),
+        ui::Width(layout.title));
 
     ui::DrawRoundedPanel(hdc, layout.filterPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     DrawFilterLabel(hdc, layout.search, UiText(L"Search", L"Поиск"));
@@ -219,11 +223,15 @@ void ClientsPage::OnPaint(HDC hdc, const RECT& client) {
 
     ui::DrawRoundedPanel(hdc, layout.clientsPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawSectionTitle(hdc, layout.clientsPanel.left + ui::Scale(16), layout.clientsPanel.top + ui::Scale(14),
-        UiText(L"Clients Table", L"Таблица клиентов"), L"", ui::Width(layout.clientsPanel) - ui::Scale(32));
+        UiText(L"Customers Table", L"Таблица клиентов"), L"", ui::Width(layout.clientsPanel) - ui::Scale(32));
+    if (clients_.empty()) {
+        ui::DrawEmptyState(hdc, layout.clientsTable, UiText(L"No customers yet", L"Клиентов пока нет"),
+            UiText(L"Customer profiles will appear after orders are created.", L"Профили клиентов появятся после создания заказов."), L"\u25C7");
+    }
 
     ui::DrawRoundedPanel(hdc, layout.profilePanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawSectionTitle(hdc, layout.profilePanel.left + ui::Scale(16), layout.profilePanel.top + ui::Scale(14),
-        UiText(L"Client Profile", L"Профиль клиента"), L"", ui::Width(layout.profilePanel) - ui::Scale(32));
+        UiText(L"Customer Profile", L"Профиль клиента"), L"", ui::Width(layout.profilePanel) - ui::Scale(32));
 
     const int left = layout.profilePanel.left + ui::Scale(20);
     const int top = layout.profilePanel.top + ui::Scale(64);
@@ -255,6 +263,10 @@ void ClientsPage::OnPaint(HDC hdc, const RECT& client) {
     ui::DrawRoundedPanel(hdc, layout.historyPanel, theme::kPanelBackground, theme::kPanelBorder, ui::Scale(18), true);
     ui::DrawSectionTitle(hdc, layout.historyPanel.left + ui::Scale(16), layout.historyPanel.top + ui::Scale(14),
         UiText(L"Purchase History", L"История покупок"), L"", ui::Width(layout.historyPanel) - ui::Scale(32));
+    if (history_.empty()) {
+        ui::DrawEmptyState(hdc, layout.historyTable, UiText(L"No purchase history", L"Истории покупок нет"),
+            UiText(L"Orders for the selected customer will appear here.", L"Заказы выбранного клиента появятся здесь."), L"\u25A1");
+    }
 }
 
 LRESULT ClientsPage::OnCommand(WPARAM wParam, LPARAM) {

@@ -84,12 +84,16 @@
   <ItemGroup>
     <ClInclude Include="include\AppMessages.h" />
     <ClInclude Include="include\AccessControl.h" />
+    <ClInclude Include="include\AuditLogPage.h" />
     <ClInclude Include="include\DataEntryDialog.h" />
     <ClInclude Include="include\Theme.h" />
     <ClInclude Include="include\UiHelpers.h" />
+    <ClInclude Include="include\UsersRolesPage.h" />
     <ClInclude Include="include\Localization.h" />
     <ClInclude Include="include\LoginWindow.h" />
+    <ClInclude Include="include\NotificationsPage.h" />
     <ClInclude Include="include\PageBase.h" />
+    <ClInclude Include="include\ProfilePage.h" />
     <ClInclude Include="include\MainWindow.h" />
     <ClInclude Include="include\DashboardPage.h" />
     <ClInclude Include="include\SalesPage.h" />
@@ -107,12 +111,16 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\AccessControl.cpp" />
+    <ClCompile Include="src\AuditLogPage.cpp" />
     <ClCompile Include="src\DataEntryDialog.cpp" />
     <ClCompile Include="src\Localization.cpp" />
     <ClCompile Include="src\LoginWindow.cpp" />
+    <ClCompile Include="src\NotificationsPage.cpp" />
     <ClCompile Include="src\Theme.cpp" />
     <ClCompile Include="src\UiHelpers.cpp" />
+    <ClCompile Include="src\UsersRolesPage.cpp" />
     <ClCompile Include="src\PageBase.cpp" />
+    <ClCompile Include="src\ProfilePage.cpp" />
     <ClCompile Include="src\MainWindow.cpp" />
     <ClCompile Include="src\DashboardPage.cpp" />
     <ClCompile Include="src\SalesPage.cpp" />
