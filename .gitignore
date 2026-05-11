@@ -1,0 +1,22 @@
+(
+echo .vs/
+echo bin/
+echo obj/
+echo Debug/
+echo Release/
+echo x64/
+echo Win32/
+echo *.user
+echo *.suo
+echo *.VC.db
+echo *.VC.VC.opendb
+echo *.exe
+echo *.dll
+echo *.pdb
+echo *.ilk
+echo *.obj
+echo *.log
+echo *.db
+echo *.sqlite
+echo *.sqlite3
+) > .gitignore
